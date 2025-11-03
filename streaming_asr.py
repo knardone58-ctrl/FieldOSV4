@@ -81,16 +81,33 @@ class VoskStreamer:
 
 def simulate_pcm_frames_wav(path: str, step_ms: int = 300) -> Iterable[bytes]:
     """Iterate deterministic PCM chunks from a WAV file."""
-    import soundfile as sf
+    import contextlib
+    import wave
+    from array import array
 
-    audio, sr = sf.read(path, dtype="int16", always_2d=False)
-    if audio.ndim == 2:
-        import numpy as np
+    with contextlib.closing(wave.open(path, "rb")) as wf:
+        sample_rate = wf.getframerate()
+        sample_width = wf.getsampwidth()
+        channels = wf.getnchannels()
+        frame_samples = int(sample_rate * (step_ms / 1000.0))
 
-        audio = (0.5 * (audio[:, 0].astype("int32") + audio[:, 1].astype("int32"))).astype("int16")
-    frame = int(sr * (step_ms / 1000))
-    for i in range(0, len(audio), frame):
-        yield audio[i : i + frame].tobytes()
+        if frame_samples <= 0:
+            raise ValueError("step_ms too small for the given sample rate")
+        if sample_width != 2:
+            raise ValueError("WAV must be 16-bit PCM")
+        if channels not in (1, 2):
+            raise ValueError("WAV must be mono or stereo")
+
+        while True:
+            raw = wf.readframes(frame_samples)
+            if not raw:
+                break
+            if channels == 1:
+                yield raw
+            else:
+                stereo = array("h", raw)
+                mono = array("h", ((stereo[i] + stereo[i + 1]) // 2 for i in range(0, len(stereo), 2)))
+                yield mono.tobytes()
 
 
 def get_pcm_stream(dev_mode: bool, *, wav_path: str, step_ms: int) -> Iterable[bytes]:
