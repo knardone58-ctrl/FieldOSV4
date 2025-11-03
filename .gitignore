@@ -1,0 +1,31 @@
+# --- FieldOS project ignore rules ---
+
+# OS / IDE noise
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+.vscode/
+.idea/
+
+# Python / Streamlit
+venv/
+__pycache__/
+*.pyc
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Local data + models
+data/audio_cache/
+data/offline_audio_cache/
+data/models/
+crm_snapshot.json
+openai_api.log
+
+# QA artifacts
+qa/tmp/
+qa/history/
+qa/last_whisper_accuracy.json
