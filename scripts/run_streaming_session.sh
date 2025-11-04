@@ -24,6 +24,10 @@ RUN_QA=true
 PORT="${FIELDOS_STREAMLIT_PORT:-8765}"
 ADDRESS="${FIELDOS_STREAMLIT_ADDRESS:-localhost}"
 
+# Default to mock worker to avoid loading faster-whisper during local smoke tests.
+export FIELDOS_FINAL_WORKER_ENABLED=${FIELDOS_FINAL_WORKER_ENABLED:-false}
+export FIELDOS_FINAL_WORKER_MOCK=${FIELDOS_FINAL_WORKER_MOCK:-true}
+
 usage() {
   cat <<'EOF'
 Usage: scripts/run_streaming_session.sh [options]

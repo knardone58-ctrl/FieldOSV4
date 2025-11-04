@@ -16,3 +16,12 @@ AUDIO_TTL_HOURS = int(os.getenv("FIELDOS_AUDIO_TTL_HOURS", "24"))
 STREAMING_ENABLED = os.getenv("STREAMING_ENABLED", "true").lower() == "true"
 VOSK_MODEL_PATH = os.getenv("VOSK_MODEL_PATH", "data/models/vosk-model-small-en-us-0.15")
 STREAM_CHUNK_MS = int(os.getenv("STREAM_CHUNK_MS", "300"))
+
+
+# Final transcript worker configuration
+FINAL_WORKER_ENABLED = os.getenv("FIELDOS_FINAL_WORKER_ENABLED", "false").lower() == "true"
+FINAL_WORKER_MOCK = os.getenv("FIELDOS_FINAL_WORKER_MOCK", "false").lower() == "true"
+FINAL_WHISPER_MODEL = os.getenv("FIELDOS_WHISPER_MODEL", "base")
+FINAL_WHISPER_DEVICE = os.getenv("FIELDOS_WHISPER_DEVICE", "cpu")
+FINAL_WHISPER_COMPUTE_TYPE = os.getenv("FIELDOS_WHISPER_COMPUTE_TYPE", "int8")
+FINAL_WHISPER_BEAM_SIZE = int(os.getenv("FIELDOS_WHISPER_BEAM_SIZE", "5"))

@@ -40,6 +40,14 @@ def _ensure_session_lists(state: Optional[MutableMapping[str, Any]] = None) -> M
     target.setdefault("stream_updates_count", 0)
     target.setdefault("stream_latency_ms_first_partial", None)
     target.setdefault("stream_dropouts", 0)
+    target.setdefault(
+        "final_worker_stats",
+        {
+            "queue_depth": 0,
+            "last_success_ts": None,
+            "last_error": None,
+        },
+    )
     return target
 
 
@@ -53,6 +61,7 @@ def _append_ops_log(
     OPS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     session = _ensure_session_lists(state)
     ts = timestamp or datetime.now()
+    final_stats = session.get("final_worker_stats") or {}
     record = {
         "ts": ts.isoformat(),
         "status": status,
@@ -61,6 +70,9 @@ def _append_ops_log(
         "stream_updates": session.get("stream_updates_count"),
         "stream_latency_ms_first_partial": session.get("stream_latency_ms_first_partial"),
         "stream_dropouts": session.get("stream_dropouts"),
+        "final_worker_queue_depth": int(final_stats.get("queue_depth") or 0),
+        "final_worker_last_success": final_stats.get("last_success_ts") or final_stats.get("last_success"),
+        "final_worker_error": final_stats.get("last_error"),
     }
     with OPS_LOG_PATH.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record) + "\n")
@@ -82,7 +94,12 @@ def load_snapshot() -> Dict:
     if not SNAPSHOT_PATH.exists():
         SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
         SNAPSHOT_PATH.write_text(json.dumps(BASE_SNAPSHOT, indent=2))
-    snap = json.loads(SNAPSHOT_PATH.read_text())
+    try:
+        raw = SNAPSHOT_PATH.read_text()
+        snap = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, OSError):
+        # File was truncated or corrupted mid-write; fall back to a fresh snapshot.
+        snap = {}
     for key, value in BASE_SNAPSHOT.items():
         if key not in snap:
             snap[key] = value if not isinstance(value, dict) else value.copy()

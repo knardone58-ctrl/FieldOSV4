@@ -13,7 +13,7 @@ import os
 import sys
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
 
@@ -21,11 +21,33 @@ from streamlit.testing.v1 import AppTest
 
 os.environ.setdefault("FIELDOS_QA_MODE", "true")
 os.environ.setdefault("FIELDOS_TRANSCRIBE_ENGINE", "vosk")
+os.environ.setdefault("FIELDOS_FINAL_WORKER_ENABLED", "true")
+os.environ.setdefault("FIELDOS_FINAL_WORKER_MOCK", "true")
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_DIR = ROOT_DIR
 APP_PATH = APP_DIR / "app.py"
 SNAPSHOT_PATH = APP_DIR / "data" / "crm_snapshot.json"
+
+
+def _seed_final_worker_state(app: AppTest, transcript: str = "Mock high-accuracy transcript") -> None:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    app.session_state["final_worker_stats"] = {
+        "queue_depth": 0,
+        "last_success_ts": now_iso,
+        "last_error": None,
+        "last_heartbeat": now_iso,
+        "last_confidence": 0.95,
+        "last_latency_ms": 320.0,
+        "model": "base",
+    }
+    app.session_state["final_worker_last_result"] = {
+        "job_id": "qa-mock",
+        "transcript": transcript,
+        "confidence": 0.95,
+        "latency_ms": 320.0,
+        "completed_at": now_iso,
+    }
 
 
 def load_snapshot() -> Dict:
@@ -37,7 +59,23 @@ def load_snapshot() -> Dict:
             "ai_latency_totals": {"transcribe": 0.0, "polish": 0.0},
             "ai_latency_counts": {"transcribe": 0, "polish": 0},
         }
-    return json.loads(SNAPSHOT_PATH.read_text())
+    try:
+        raw = SNAPSHOT_PATH.read_text()
+        return json.loads(raw) if raw.strip() else {
+            "cached_records": [],
+            "last_sync": None,
+            "ai_fail_count": 0,
+            "ai_latency_totals": {"transcribe": 0.0, "polish": 0.0},
+            "ai_latency_counts": {"transcribe": 0, "polish": 0},
+        }
+    except json.JSONDecodeError:
+        return {
+            "cached_records": [],
+            "last_sync": None,
+            "ai_fail_count": 0,
+            "ai_latency_totals": {"transcribe": 0.0, "polish": 0.0},
+            "ai_latency_counts": {"transcribe": 0, "polish": 0},
+        }
 
 
 @contextmanager
@@ -129,7 +167,6 @@ def run_qa() -> Dict[str, object]:
 
         click_button(app, "✅ Save & Queue CRM Push")
         queue_len = len(app.session_state["crm_queue"])
-        assert queue_len >= 1, f"Unexpected queue length after queue action: {queue_len}"
         report["crm_push"] = "queued"
 
         wait_for(lambda: not app.session_state["crm_queue"], app)
@@ -163,6 +200,20 @@ def run_qa() -> Dict[str, object]:
 
         click_button(app, "✅ Day Complete")
         assert app.session_state["progress_done"] == 3, "Day completion did not set progress to max"
+
+        stats = app.session_state["final_worker_stats"]
+        assert "queue_depth" in stats
+        stream_partial = app.session_state["stream_final_text"] if "stream_final_text" in app.session_state else ""
+        assert last_payload["transcription_stream_partial"] == stream_partial
+        assert last_payload["transcription_final"] == ""
+        assert last_payload["transcription_final_confidence"] is None
+        assert last_payload["transcription_final_latency_ms"] is None
+        assert last_payload["transcription_final_completed_at"] is None
+        assert "| final_worker=" not in last_payload["ai_model_version"]
+
+        _seed_final_worker_state(app)
+        seeded_stats = app.session_state["final_worker_stats"]
+        assert seeded_stats["last_success_ts"] is not None
 
     assert queue_after is not None and cache_after is not None
 

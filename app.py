@@ -7,11 +7,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
@@ -29,6 +30,12 @@ from fieldos_config import (
     STREAMING_ENABLED,
     VOSK_MODEL_PATH,
     STREAM_CHUNK_MS,
+    FINAL_WORKER_ENABLED,
+    FINAL_WORKER_MOCK,
+    FINAL_WHISPER_MODEL,
+    FINAL_WHISPER_DEVICE,
+    FINAL_WHISPER_COMPUTE_TYPE,
+    FINAL_WHISPER_BEAM_SIZE,
 )
 from fieldos_version import FIELDOS_VERSION
 
@@ -36,6 +43,15 @@ from crm_sync import enqueue_crm_push, flush_offline_cache, load_snapshot, save_
 from ai_parser import polish_note_with_gpt, transcribe_audio
 from streaming_asr import VoskStreamer, get_pcm_stream, _VOSK_AVAILABLE
 from audio_cache import ensure_cache_dir, calculate_audio_duration
+from final_transcriber import (
+    WorkerConfig as FinalWorkerConfig,
+    WorkerHandle as FinalWorkerHandle,
+    collect_stats as collect_final_stats,
+    poll_results as poll_final_results,
+    start_worker as start_final_worker,
+    submit_job as submit_final_job,
+    shutdown_worker as shutdown_final_worker,
+)
 
 FOCUS_CONTACT = {
     "name": "Acme HOA",
@@ -59,6 +75,11 @@ FOLLOWUPS = [
 def init_state() -> None:
     st.session_state.setdefault("draft_note", "")
     st.session_state.setdefault("raw_transcript", "")
+    st.session_state.setdefault("raw_transcript_display", "Awaiting capture")
+    st.session_state.setdefault("processed_clip_fingerprint", None)
+    st.session_state.setdefault("dedupe_notice_shown", False)
+    st.session_state.setdefault("final_worker_toast_shown", False)
+    st.session_state.setdefault("last_crm_payload", None)
     st.session_state.setdefault("followups", FOLLOWUPS.copy())
     st.session_state.setdefault("snoozed", set())
     st.session_state.setdefault("offline", False)
@@ -76,6 +97,16 @@ def init_state() -> None:
     st.session_state.setdefault("last_transcription_confidence", 0.0)
     st.session_state.setdefault("last_transcription_duration", 0.0)
     st.session_state.setdefault("last_polish_duration", 0.0)
+    st.session_state.setdefault("final_worker_handle", None)
+    st.session_state.setdefault("final_worker_jobs", {})
+    st.session_state.setdefault("final_worker_results", [])
+    st.session_state.setdefault("final_worker_logs", [])
+    st.session_state.setdefault(
+        "final_worker_stats",
+        _final_stats_default(),
+    )
+    st.session_state.setdefault("final_worker_warning_logged", False)
+    st.session_state.setdefault("final_worker_last_result", None)
 
 
 
@@ -104,6 +135,162 @@ def ensure_audio_cache_dir() -> Path:
     return ensure_cache_dir(cache_dir, AUDIO_TTL_HOURS, st.session_state)
 
 
+# --- Helpers ---
+def _final_stats_default() -> Dict[str, Optional[Any]]:
+    return {
+        "queue_depth": 0,
+        "last_success_ts": None,
+        "last_error": None,
+        "last_heartbeat": None,
+        "last_confidence": None,
+        "last_latency_ms": None,
+        "model": FINAL_WHISPER_MODEL,
+    }
+
+
+def _format_timestamp(value: Optional[str]) -> str:
+    if not value:
+        return "—"
+    try:
+        normalized = value.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_dt = dt.astimezone()
+        return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except Exception:
+        return value
+
+
+def _final_snapshot_block() -> Dict[str, Optional[Any]]:
+    stats = st.session_state.get("final_worker_stats", _final_stats_default()).copy()
+    last_result = st.session_state.get("final_worker_last_result") or {}
+
+    block = {
+        "queue_depth": int(stats.get("queue_depth") or 0),
+        "last_success_ts": stats.get("last_success_ts"),
+        "last_error": stats.get("last_error"),
+        "last_heartbeat_ts": stats.get("last_heartbeat"),
+        "last_confidence": last_result.get("confidence") if last_result else None,
+        "last_latency_ms": last_result.get("latency_ms") if last_result else None,
+        "model": stats.get("model") or FINAL_WHISPER_MODEL,
+    }
+
+    return block
+
+
+# --- Final transcription worker scaffolding (V4.4) ---
+def ensure_final_worker() -> Optional[FinalWorkerHandle]:
+    config = FinalWorkerConfig(
+        enabled=FINAL_WORKER_ENABLED,
+        mock=FINAL_WORKER_MOCK,
+        qa_mode=QA_MODE,
+        model=FINAL_WHISPER_MODEL,
+        device=FINAL_WHISPER_DEVICE,
+        compute_type=FINAL_WHISPER_COMPUTE_TYPE,
+        beam_size=FINAL_WHISPER_BEAM_SIZE,
+    )
+
+    current_handle: Optional[FinalWorkerHandle] = st.session_state.get("final_worker_handle")
+    try:
+        handle = start_final_worker(config, current_handle)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        if not st.session_state.get("final_worker_warning_logged", False):
+            st.warning(f"High-accuracy transcript worker unavailable: {exc}")
+            st.toast("⚠️ High-accuracy transcription worker disabled.", icon="⚠️")
+            st.session_state["final_worker_warning_logged"] = True
+        shutdown_final_worker(current_handle)
+        st.session_state["final_worker_stats"] = {
+            **_final_stats_default(),
+            "last_error": str(exc),
+        }
+        st.session_state["final_worker_last_result"] = None
+        handle = None
+
+    st.session_state["final_worker_handle"] = handle
+    if handle is None:
+        stats_obj = st.session_state.get("final_worker_stats")
+        if not stats_obj or not stats_obj.get("last_error"):
+            st.session_state["final_worker_stats"] = _final_stats_default()
+        st.session_state["final_worker_last_result"] = None
+    else:
+        st.session_state.setdefault("final_worker_jobs", {})
+        st.session_state.setdefault("final_worker_results", [])
+        st.session_state.setdefault("final_worker_logs", [])
+        st.session_state.setdefault("final_worker_stats", _final_stats_default())
+    return handle
+
+
+def poll_final_worker(handle: Optional[FinalWorkerHandle]) -> None:
+    if handle is None:
+        stats_obj = st.session_state.get("final_worker_stats")
+        if not stats_obj or not stats_obj.get("last_error"):
+            st.session_state["final_worker_stats"] = _final_stats_default()
+        st.session_state["final_worker_last_result"] = None
+        return
+
+    jobs = st.session_state.setdefault("final_worker_jobs", {})
+    results = st.session_state.setdefault("final_worker_results", [])
+
+    def _on_result(message: Dict[str, Any]) -> None:
+        results.append(message)
+        job_id = message.get("job_id")
+        job_entry = jobs.get(job_id)
+        completed_iso = datetime.now(timezone.utc).isoformat()
+        st.session_state["final_worker_last_result"] = {
+            "job_id": job_id,
+            "transcript": message.get("transcript", ""),
+            "confidence": message.get("confidence"),
+            "latency_ms": message.get("latency_ms"),
+            "completed_at": completed_iso,
+        }
+        if not st.session_state.get("final_worker_toast_shown", False):
+            st.toast(
+                "High-accuracy transcript ready — final text and metrics are now available in the panel.",
+                icon="✅",
+            )
+            st.session_state["final_worker_toast_shown"] = True
+        if job_entry is not None:
+            job_entry.update(
+                {
+                    "status": "completed" if not message.get("error") else "error",
+                    "completed_at": completed_iso,
+                    "transcript": message.get("transcript", ""),
+                    "error": message.get("error"),
+                }
+            )
+
+    def _on_error(error_text: str, payload: Dict[str, Any]) -> None:
+        if not st.session_state.get("final_worker_warning_logged", False):
+            st.warning(f"High-accuracy worker warning: {error_text}")
+            st.session_state["final_worker_warning_logged"] = True
+
+    poll_final_results(handle, on_result=_on_result, on_error=_on_error)
+
+    pending_jobs = sum(1 for job in jobs.values() if job.get("status") == "queued")
+    stats_raw = collect_final_stats(handle, pending_jobs)
+
+    def _to_iso(ts: Optional[float]) -> Optional[str]:
+        if ts is None:
+            return None
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+    stats = {
+        "queue_depth": stats_raw.get("queue_depth", 0),
+        "last_success_ts": _to_iso(stats_raw.get("last_success_ts")),
+        "last_error": stats_raw.get("last_error"),
+        "last_heartbeat": _to_iso(stats_raw.get("last_heartbeat")),
+        "last_confidence": None,
+        "last_latency_ms": None,
+        "model": stats_raw.get("model") or FINAL_WHISPER_MODEL,
+    }
+
+    last_result = st.session_state.get("final_worker_last_result") or {}
+    if last_result:
+        stats["last_confidence"] = last_result.get("confidence")
+        stats["last_latency_ms"] = last_result.get("latency_ms")
+
+    st.session_state["final_worker_stats"] = stats
 # --- V4.3 live streaming integration (Vosk) ---
 def apply_streaming_live() -> None:
     """Run the Vosk streaming loop and persist telemetry safely."""
@@ -169,7 +356,8 @@ def apply_streaming_live() -> None:
                     "updates": st.session_state["stream_updates_count"],
                     "dropouts": st.session_state["stream_dropouts"],
                     "fallbacks": st.session_state["stream_fallbacks"],
-                }
+                },
+                "final_transcribe_stats": _final_snapshot_block(),
             }
         )
     except Exception:
@@ -189,6 +377,8 @@ def badge(text: str, tone: str = "neutral") -> str:
 st.set_page_config(page_title="FieldOS — Daily Command Center", layout="wide")
 init_state()
 init_streaming_state()
+final_worker_handle = ensure_final_worker()
+poll_final_worker(final_worker_handle)
 
 if not st.session_state["crm_worker_started"]:
     start_crm_worker()
@@ -211,6 +401,19 @@ with st.sidebar:
     st.metric("AI failures", int(st.session_state["ai_fail_count"]))
     st.metric("Queue length", len(st.session_state["crm_queue"]))
     st.metric("Cached records", len(st.session_state["offline_cache"]))
+    st.markdown("### 🧠 Final Transcript Worker")
+    final_stats = st.session_state.get("final_worker_stats", _final_stats_default())
+    st.metric("Final transcript queue", final_stats.get("queue_depth", 0))
+    status_bits = []
+    if final_stats.get("last_success_ts"):
+        status_bits.append(f"last success: {_format_timestamp(final_stats['last_success_ts'])}")
+    if final_stats.get("last_error"):
+        status_bits.append(f"last error: {final_stats['last_error']}")
+    if final_stats.get("last_heartbeat"):
+        status_bits.append(f"heartbeat: {_format_timestamp(final_stats['last_heartbeat'])}")
+    if not status_bits:
+        status_bits.append("no worker activity yet")
+    st.caption(" | ".join(status_bits))
     st.markdown("### 🌀 Streaming")
     latency = st.session_state.get("stream_latency_ms_first_partial")
     latency_display = f"{latency} ms" if latency is not None else "—"
@@ -287,26 +490,66 @@ with c1:
 
     audio_cache_dir = ensure_audio_cache_dir()
 
-    st.caption(f"HOLD to record (up to {AUDIO_MAX_SECONDS}s). Larger clips may feel slow until streaming arrives.")
-    audio = st.file_uploader(
-        "🎙️ Record Voice",
-        type=["wav", "m4a"],
-        label_visibility="collapsed",
-    )
-    if audio is not None:
-        audio_bytes = audio.read()
-        duration = calculate_audio_duration(audio_bytes, audio.name or "")
+    st.caption(f"Record or upload up to {AUDIO_MAX_SECONDS}s (shorter clips respond faster).")
+    raw_display = st.session_state.get("raw_transcript_display", "Awaiting capture")
+    with st.container(border=True):
+        st.caption("Raw transcript (read-only)")
+        st.text_area(
+            "Raw transcript (read-only)",
+            value=raw_display,
+            key="raw_transcript_readonly",
+            height=120,
+            disabled=True,
+            label_visibility="collapsed",
+        )
+
+    audio_bytes: Optional[bytes] = None
+    audio_name = ""
+
+    if os.getenv("FIELDOS_ENABLE_NATIVE_AUDIO", "true").lower() == "true":
+        audio_recording = st.audio_input(
+            "🎙️ Hold to record",
+            label_visibility="collapsed",
+        )
+        if audio_recording is not None:
+            audio_bytes = audio_recording.getvalue()
+            audio_name = audio_recording.name or "recording.wav"
+
+    if audio_bytes is None:
+        audio_upload = st.file_uploader(
+            "🎙️ Upload Voice Clip",
+            type=["wav", "m4a"],
+            label_visibility="collapsed",
+            key="audio_uploader",
+        )
+        if audio_upload is not None:
+            audio_bytes = audio_upload.read()
+            audio_name = audio_upload.name or ""
+
+    if audio_bytes is not None:
+        clip_fingerprint = hashlib.sha1(audio_bytes).hexdigest()
+        processed_fingerprint = st.session_state.get("processed_clip_fingerprint")
+        if processed_fingerprint == clip_fingerprint:
+            if not st.session_state.get("dedupe_notice_shown", False):
+                st.info("Clip already processed. Upload a new audio clip to transcribe again.")
+                st.session_state["dedupe_notice_shown"] = True
+        else:
+            st.session_state["dedupe_notice_shown"] = False
+        duration = calculate_audio_duration(audio_bytes, audio_name)
         if duration is not None and duration > AUDIO_MAX_SECONDS:
             st.toast(
                 f"Clip is {duration:.1f}s — max length is {AUDIO_MAX_SECONDS}s. Please record a shorter note.",
                 icon="⚠️",
             )
-        else:
+        elif processed_fingerprint != clip_fingerprint:
+            st.session_state["processed_clip_fingerprint"] = clip_fingerprint
             file_path = audio_cache_dir / f"clip_{int(time.time())}.wav"
             file_path.write_bytes(audio_bytes)
             with st.spinner("Transcribing…"):
                 transcript, confidence, duration = transcribe_audio(str(file_path))
             st.session_state["raw_transcript"] = transcript
+            cleaned_transcript = transcript.strip()
+            st.session_state["raw_transcript_display"] = cleaned_transcript or "Transcription unavailable (see draft note)."
             if transcript and "Transcription unavailable" not in transcript:
                 st.session_state["draft_note"] = (st.session_state["draft_note"] + "\n" + transcript).strip()
                 st.session_state["last_transcription_confidence"] = confidence
@@ -317,6 +560,40 @@ with c1:
             else:
                 st.session_state["ai_fail_count"] += 1
                 st.toast("Transcription unavailable right now—saved raw audio context to note.", icon="⚠️")
+
+            handle = st.session_state.get("final_worker_handle") or ensure_final_worker()
+            if handle is not None:
+                try:
+                    job_id = submit_final_job(
+                        handle,
+                        file_path,
+                        {
+                            "audio_name": audio_name,
+                            "submitted_via": "app",
+                        },
+                    )
+                    jobs = st.session_state.setdefault("final_worker_jobs", {})
+                    jobs[job_id] = {
+                        "status": "queued",
+                        "submitted_at": time.time(),
+                        "clip_path": str(file_path),
+                        "audio_name": audio_name,
+                    }
+                    st.session_state["final_worker_warning_logged"] = False
+                    st.session_state["final_worker_toast_shown"] = False
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    if not st.session_state.get("final_worker_warning_logged", False):
+                        st.warning(f"Unable to queue high-accuracy transcript job: {exc}")
+                        st.session_state["final_worker_warning_logged"] = True
+            else:
+                if FINAL_WORKER_ENABLED and not st.session_state.get("final_worker_warning_logged", False):
+                    st.info("High-accuracy transcript worker not running; using current transcript only.")
+                    st.session_state["final_worker_warning_logged"] = True
+
+            poll_final_worker(st.session_state.get("final_worker_handle"))
+    else:
+        if not st.session_state.get("raw_transcript_display"):
+            st.session_state["raw_transcript_display"] = "Awaiting capture"
 
     download_text = (
         st.session_state.get("stream_final_text") or st.session_state.get("raw_transcript") or ""
@@ -329,6 +606,36 @@ with c1:
         disabled=not download_text.strip(),
         help=None if download_text.strip() else "No transcript captured yet.",
     )
+
+    final_stats_for_panel = st.session_state.get("final_worker_stats", _final_stats_default())
+    last_result = st.session_state.get("final_worker_last_result") or {}
+    with st.container(border=True):
+        st.markdown("#### 🧠 High-Accuracy Transcript")
+        queue_depth = final_stats_for_panel.get("queue_depth", 0) or 0
+        last_error = final_stats_for_panel.get("last_error")
+        if queue_depth > 0 or last_error:
+            warning_message = f"Background worker processing {queue_depth} job(s)."
+            if last_error:
+                warning_message = f"{warning_message} Last error: {last_error}"
+            st.warning(warning_message)
+
+        if last_result:
+            transcript_text = last_result.get("transcript") or "—"
+            confidence = last_result.get("confidence")
+            if confidence is None:
+                confidence_display = "—"
+            else:
+                confidence_display = f"{max(min(confidence * 100, 100), 0):.1f}%"
+            latency = last_result.get("latency_ms")
+            latency_display = f"{latency:.0f} ms" if latency is not None else "—"
+            completed_display = _format_timestamp(last_result.get("completed_at"))
+
+            st.write(transcript_text)
+            st.caption(
+                f"Confidence: {confidence_display} (model certainty) • Latency: {latency_display} (processing time) • Completed: {completed_display}"
+            )
+        else:
+            st.info("High-accuracy transcript pending (worker disabled or still processing).")
 
     def _handle_polish() -> None:
         metadata: Dict[str, str] = {
@@ -354,15 +661,31 @@ with c1:
             _handle_polish()
 
     if st.button("✅ Save & Queue CRM Push"):
+        last_result = st.session_state.get("final_worker_last_result") or {}
+        final_confidence = last_result.get("confidence") if last_result else None
+        final_latency = last_result.get("latency_ms") if last_result else None
+        final_completed_at = last_result.get("completed_at") if last_result else None
+        final_transcript = last_result.get("transcript") if last_result else ""
+        stream_partial = st.session_state.get("stream_final_text") or ""
+
+        model_suffix = ""
+        if final_transcript:
+            model_suffix = f" | final_worker={FINAL_WHISPER_MODEL}"
+
         payload = {
             "contact_name": FOCUS_CONTACT["contact"],
             "account": FOCUS_CONTACT["name"],
             "service": FOCUS_CONTACT["service"],
             "note": st.session_state["draft_note"].strip(),
             "transcription_raw": st.session_state.get("raw_transcript", ""),
+            "transcription_stream_partial": stream_partial,
+            "transcription_final": final_transcript,
+            "transcription_final_confidence": final_confidence,
+            "transcription_final_latency_ms": final_latency,
+            "transcription_final_completed_at": final_completed_at,
             "note_polished": st.session_state["draft_note"].strip(),
             "transcription_confidence": float(st.session_state.get("last_transcription_confidence", 0.0)),
-            "ai_model_version": f"{TRANSCRIBE_ENGINE} + gpt-5-turbo | FieldOS {FIELDOS_VERSION}",
+            "ai_model_version": f"{TRANSCRIBE_ENGINE} + gpt-5-turbo | FieldOS {FIELDOS_VERSION}{model_suffix}",
             "processing_time": float(
                 st.session_state.get("last_transcription_duration", 0.0)
                 + st.session_state.get("last_polish_duration", 0.0)
@@ -375,10 +698,30 @@ with c1:
                 "ai_fail_count": st.session_state["ai_fail_count"],
                 "ai_latency_totals": st.session_state["ai_latency_totals"],
                 "ai_latency_counts": st.session_state["ai_latency_counts"],
+                "final_transcribe_stats": _final_snapshot_block(),
             }
         )
         st.toast("Saved locally & queued CRM sync.")
         st.session_state["progress_done"] = min(3, st.session_state["progress_done"] + 1)
+        st.session_state["last_saved_clip_fingerprint"] = st.session_state.get("processed_clip_fingerprint")
+        st.session_state["dedupe_notice_shown"] = False
+        if "audio_uploader" in st.session_state:
+            st.session_state["audio_uploader"] = None
+        st.session_state["last_crm_payload"] = payload
+
+    last_payload = st.session_state.get("last_crm_payload")
+    if not last_payload and st.session_state.get("crm_sync_log"):
+        try:
+            last_payload = st.session_state["crm_sync_log"][-1]["payload"]
+        except (IndexError, KeyError, TypeError):
+            last_payload = None
+
+    with st.expander("Last CRM payload", expanded=False):
+        if last_payload:
+            payload_preview = dict(last_payload)
+            st.json(payload_preview)
+        else:
+            st.caption("No CRM payload queued yet. Save a note to preview the outgoing event.")
 
 with c2:
     st.markdown("### 📋 Follow-Ups")

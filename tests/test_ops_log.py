@@ -28,6 +28,11 @@ class OpsLogTests(unittest.TestCase):
             "stream_updates_count": 7,
             "stream_latency_ms_first_partial": 512,
             "stream_dropouts": 2,
+            "final_worker_stats": {
+                "queue_depth": 4,
+                "last_success_ts": "2025-01-01T11:59:00+00:00",
+                "last_error": "timeout",
+            },
         }
         fixed_ts = datetime(2025, 1, 1, 12, 0, 0)
 
@@ -40,6 +45,9 @@ class OpsLogTests(unittest.TestCase):
         self.assertEqual(record["stream_latency_ms_first_partial"], 512)
         self.assertEqual(record["stream_dropouts"], 2)
         self.assertEqual(record["ts"], fixed_ts.isoformat())
+        self.assertEqual(record["final_worker_queue_depth"], 4)
+        self.assertEqual(record["final_worker_last_success"], "2025-01-01T11:59:00+00:00")
+        self.assertEqual(record["final_worker_error"], "timeout")
 
         contents = self.ops_path.read_text().strip().splitlines()
         self.assertEqual(len(contents), 1)

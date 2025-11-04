@@ -11,6 +11,8 @@
 | 2025-11-03 | V4.4 | Vosk streaming stood up with headless runner |
 | 2025-11-03 | V4.4 | Audio hygiene + ops telemetry made observable |
 | 2025-11-04 | V4.4 | Streaming pilot preflight + QA hardening |
+| 2025-11-04 | V4.4 | Faster-whisper background worker scaffolding |
+| 2025-11-04 | V4.4 | Final worker production rollout readiness |
 
 ## 2025-10-15 · FieldOS V4.1 — Daily cockpit narrative anchored the workflow
 
@@ -122,4 +124,38 @@
 - `scripts/report_ops_log.py`
 - `scripts/post_ci_wrap.sh`
 - `docs/fieldos_narrative/timeline.json`
+- `docs/fieldos_narrative/product_timeline.md`
+
+## 2025-11-04 · FieldOS V4.4 — Faster-whisper background worker scaffolding
+
+**Summary:** Introduced the final transcription worker harness with mockable fast path, app integration, and QA guardrails ahead of exposing high-accuracy transcripts in the UI.
+
+**Highlights**
+- Landed Streamlit-free final_transcriber module with faster-whisper support, mock mode, heartbeat/error tracking, and clean shutdown semantics.
+- App now queues captured clips into the worker, records stats in session state, and surfaces warnings when dependencies are missing.
+- Expanded docs, checklists, and scripts to cover new dependencies, mock-mode unit tests, and worker setup workflows.
+
+**Key Artifacts**
+- `final_transcriber.py`
+- `app.py`
+- `tests/test_final_worker.py`
+- `docs/faster_whisper_checklist.md`
+- `docs/final_worker_prototype.md`
+- `scripts/prepare_final_worker.sh`
+
+## 2025-11-04 · FieldOS V4.4 — Final worker production rollout readiness
+
+**Summary:** Promoted the faster-whisper worker from mock scaffold to a production-ready path with operational runbooks, monitoring, and smoke-test tooling.
+
+**Highlights**
+- Added a standalone CLI to launch the worker outside Streamlit for live smoke tests and heartbeats.
+- Extended ops dashboards and reports with final worker queue depth, last success timestamps, and warning thresholds.
+- Published a runbook covering enablement, troubleshooting, rollback, and release tagging guidance.
+
+**Key Artifacts**
+- `scripts/start_final_worker.py`
+- `ops_dashboard.py`
+- `scripts/report_ops_log.py`
+- `docs/final_worker_runbook.md`
+- `docs/faster_whisper_checklist.md`
 - `docs/fieldos_narrative/product_timeline.md`
