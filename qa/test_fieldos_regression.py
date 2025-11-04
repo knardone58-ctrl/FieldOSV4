@@ -23,7 +23,7 @@ os.environ.setdefault("FIELDOS_QA_MODE", "true")
 os.environ.setdefault("FIELDOS_TRANSCRIBE_ENGINE", "vosk")
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-APP_DIR = ROOT_DIR / "FieldOSV4"
+APP_DIR = ROOT_DIR
 APP_PATH = APP_DIR / "app.py"
 SNAPSHOT_PATH = APP_DIR / "data" / "crm_snapshot.json"
 

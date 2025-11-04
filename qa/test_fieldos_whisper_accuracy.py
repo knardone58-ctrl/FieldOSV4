@@ -19,7 +19,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-APP_DIR = ROOT_DIR / "FieldOSV4"
+APP_DIR = ROOT_DIR
 APP_PATH = APP_DIR / "app.py"
 DUMMY_CLIP = ROOT_DIR / "qa" / "tmp" / "stubbed_clip.wav"
 

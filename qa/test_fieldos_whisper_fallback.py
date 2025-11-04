@@ -19,9 +19,9 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-APP_PATH = "FieldOSV4/app.py"
 ROOT = Path(__file__).resolve().parents[1]
-APP_DIR = ROOT / "FieldOSV4"
+APP_DIR = ROOT
+APP_PATH = APP_DIR / "app.py"
 
 os.environ.setdefault("FIELDOS_QA_MODE", "false")
 os.environ.setdefault("FIELDOS_TRANSCRIBE_ENGINE", "whisper_local")
@@ -37,7 +37,7 @@ from fieldos_config import POLISH_CTA  # noqa: E402
 
 def run_whisper_fallback_test() -> dict:
     report = {"start": datetime.now().isoformat(timespec="seconds")}
-    app = AppTest.from_file(APP_PATH)
+    app = AppTest.from_file(str(APP_PATH))
     app.run(timeout=5)
 
     baseline_fail = app.session_state["ai_fail_count"] if "ai_fail_count" in app.session_state else 0

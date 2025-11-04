@@ -4,8 +4,9 @@ from streamlit.testing.v1 import AppTest
 import os, sys, time
 from pathlib import Path
 
-APP_DIR = "FieldOSV4"
-sys.path.insert(0, str(Path(APP_DIR)))
+APP_DIR = Path(__file__).resolve().parents[1]
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
 @patch("streaming_asr.VoskStreamer._consume")
 def test_streaming_minimal(mock_consume):
