@@ -10,6 +10,7 @@
 | 2025-11-03 | V4.3 | Remote repo + QA workflow activated |
 | 2025-11-03 | V4.4 | Vosk streaming stood up with headless runner |
 | 2025-11-03 | V4.4 | Audio hygiene + ops telemetry made observable |
+| 2025-11-04 | V4.4 | Streaming pilot preflight + QA hardening |
 
 ## 2025-10-15 · FieldOS V4.1 — Daily cockpit narrative anchored the workflow
 
@@ -100,3 +101,25 @@
 - `scripts/report_ops_log.py`
 - `ops_dashboard.py`
 - `.github/workflows/qa-suite.yml`
+
+## 2025-11-04 · FieldOS V4.4 — Streaming pilot preflight + QA hardening
+
+**Summary:** Confirmed local environment readiness, tightened automated coverage, and documented the path to live streaming telemetry ahead of the field pilot.
+
+**Highlights**
+- Verified clean repo state and virtualenv activation; documented that live Streamlit checks must run on-device due to audio dependencies.
+- Reaffirmed audio hygiene + ops logging via targeted pytest runs and deterministic QA seeding of ops_log.jsonl.
+- Validated ops reporting scripts on empty logs; flagged known NumPy/SIGFPE in AI regression as informational warning.
+- Outlined push prerequisites (GitHub PAT/SSH) once network constraints lift for publishing V4.4 artifacts.
+
+**Key Artifacts**
+- `audio_cache.py`
+- `app.py`
+- `crm_sync.py`
+- `tests/test_audio_cache.py`
+- `tests/test_ops_log.py`
+- `qa/test_fieldos_streaming_deterministic.py`
+- `scripts/report_ops_log.py`
+- `scripts/post_ci_wrap.sh`
+- `docs/fieldos_narrative/timeline.json`
+- `docs/fieldos_narrative/product_timeline.md`

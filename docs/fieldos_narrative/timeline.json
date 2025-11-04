@@ -100,5 +100,29 @@
       "ops_dashboard.py",
       ".github/workflows/qa-suite.yml"
     ]
+  },
+  {
+    "date": "2025-11-04",
+    "tag": "V4.4",
+    "title": "Streaming pilot preflight + QA hardening",
+    "summary": "Confirmed local environment readiness, tightened automated coverage, and documented the path to live streaming telemetry ahead of the field pilot.",
+    "highlights": [
+      "Verified clean repo state and virtualenv activation; documented that live Streamlit checks must run on-device due to audio dependencies.",
+      "Reaffirmed audio hygiene + ops logging via targeted pytest runs and deterministic QA seeding of ops_log.jsonl.",
+      "Validated ops reporting scripts on empty logs; flagged known NumPy/SIGFPE in AI regression as informational warning.",
+      "Outlined push prerequisites (GitHub PAT/SSH) once network constraints lift for publishing V4.4 artifacts."
+    ],
+    "artifacts": [
+      "audio_cache.py",
+      "app.py",
+      "crm_sync.py",
+      "tests/test_audio_cache.py",
+      "tests/test_ops_log.py",
+      "qa/test_fieldos_streaming_deterministic.py",
+      "scripts/report_ops_log.py",
+      "scripts/post_ci_wrap.sh",
+      "docs/fieldos_narrative/timeline.json",
+      "docs/fieldos_narrative/product_timeline.md"
+    ]
   }
 ]
