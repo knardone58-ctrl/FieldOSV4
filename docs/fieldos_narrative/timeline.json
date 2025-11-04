@@ -1,0 +1,104 @@
+[
+  {
+    "date": "2025-10-15",
+    "tag": "V4.1",
+    "title": "Daily cockpit narrative anchored the workflow",
+    "summary": "Product story locked the FieldOS day-in-the-life: focus lead card, single-tap voice notes, GPT polish, CRM queue, and a celebratory close.",
+    "highlights": [
+      "Framed the hero banner with focus contact and urgency badges.",
+      "Kept voice capture + GPT polish at the center of the workflow.",
+      "Outlined follow-up chips, offline queue, and end-of-day celebration."
+    ],
+    "artifacts": [
+      "docs/fieldos_narrative/product_story.md:1"
+    ]
+  },
+  {
+    "date": "2025-10-24",
+    "tag": "V4.2",
+    "title": "Prototype Streamlit app shipped with AI + CRM scaffolding",
+    "summary": "Delivered a working cockpit with stubbed AI parser, CRM worker, offline cache, and QA harness so reps could rehearse the daily command center.",
+    "highlights": [
+      "Streamlit app drove focus lead, follow-ups, and action footer.",
+      "Whisper/Vosk stubs plus GPT polish kept the workflow usable offline.",
+      "CRM queue, snapshot persistence, and QA scripts established regression coverage."
+    ],
+    "artifacts": [
+      "app.py",
+      "crm_sync.py",
+      "ai_parser.py",
+      "qa/qa_suite.sh"
+    ]
+  },
+  {
+    "date": "2025-11-03",
+    "tag": "V4.3",
+    "title": "Streaming telemetry scaffold and deterministic QA landed",
+    "summary": "Seeded stream_* session keys, archived metrics, and extended QA so CI tracked whisper accuracy and streaming health.",
+    "highlights": [
+      "init_streaming_state() and apply_streaming_live() established telemetry plumbing.",
+      "Deterministic streaming QA covered fallback behaviour until live PCM shipped.",
+      "Metadata, scaffold, and technical notes documented the streaming spine."
+    ],
+    "artifacts": [
+      "streaming_asr.py",
+      "qa/test_fieldos_streaming_deterministic.py",
+      "docs/fieldos_narrative/scaffold.md:1",
+      "docs/fieldos_narrative/technical_notes.md:1",
+      "docs/fieldos_narrative/metadata.yaml:1"
+    ]
+  },
+  {
+    "date": "2025-11-03",
+    "tag": "V4.3",
+    "title": "Remote repo + QA workflow activated",
+    "summary": "Rebased into main, resolved README conflicts, and pushed FieldOSV4 to origin so CI and collaboration could begin.",
+    "highlights": [
+      "Resolved README merge, rebased cleanly, and established main on GitHub.",
+      "QA suite wired into remote repo; README clarified setup and QA instructions."
+    ],
+    "artifacts": [
+      "README.md",
+      "scripts/setup_env.sh",
+      "qa/qa_suite.sh",
+      "commit f341f7a"
+    ]
+  },
+  {
+    "date": "2025-11-03",
+    "tag": "V4.4",
+    "title": "Vosk streaming stood up with headless runner",
+    "summary": "Downloaded model assets, converted PCM ingestion to stdlib, and verified streaming telemetry with a helper script.",
+    "highlights": [
+      "Vosk model bundle unpacked under data/models/.",
+      "Refined streaming_asr simulate_pcm_frames_wav() to avoid soundfile dependency.",
+      "scripts/run_streaming_session.sh automated headless tests + QA fallback."
+    ],
+    "artifacts": [
+      "streaming_asr.py",
+      "scripts/run_streaming_session.sh",
+      "data/models/vosk-model-small-en-us-0.15/"
+    ]
+  },
+  {
+    "date": "2025-11-03",
+    "tag": "V4.4",
+    "title": "Audio hygiene + ops telemetry made observable",
+    "summary": "TTL cleanup guardrails landed alongside ops_log.jsonl, streaming summary UI, ops dashboard, and CI artifacts.",
+    "highlights": [
+      "audio_cache helpers purge stale clips and block over-length uploads before hitting disk.",
+      "Streaming metrics now surface in-app with download CTA, plus ops_log.jsonl captures CRM + streaming stats.",
+      "Ops tests, dashboard, and GitHub Actions artifact publishing keep telemetry visible."
+    ],
+    "artifacts": [
+      "audio_cache.py",
+      "app.py",
+      "crm_sync.py",
+      "tests/test_audio_cache.py",
+      "tests/test_ops_log.py",
+      "scripts/report_ops_log.py",
+      "ops_dashboard.py",
+      ".github/workflows/qa-suite.yml"
+    ]
+  }
+]
