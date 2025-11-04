@@ -12,12 +12,13 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, MutableMapping, Optional
 
 import streamlit as st
 
 SNAPSHOT_PATH = Path("data/crm_snapshot.json")
 WORKER_NAME = "crm-sync-worker"
+OPS_LOG_PATH = Path("data/ops_log.jsonl")
 
 # Base snapshot guarantees keys for new telemetry fields
 BASE_SNAPSHOT = {
@@ -29,11 +30,51 @@ BASE_SNAPSHOT = {
 }
 
 
-def _ensure_session_lists() -> None:
-    st.session_state.setdefault("crm_queue", [])
-    st.session_state.setdefault("crm_sync_log", [])
-    st.session_state.setdefault("offline_cache", [])
-    st.session_state.setdefault("gps", "")
+def _ensure_session_lists(state: Optional[MutableMapping[str, Any]] = None) -> MutableMapping[str, Any]:
+    target = st.session_state if state is None else state
+    target.setdefault("crm_queue", [])
+    target.setdefault("crm_sync_log", [])
+    target.setdefault("offline_cache", [])
+    target.setdefault("gps", "")
+    target.setdefault("ai_fail_count", 0)
+    target.setdefault("stream_updates_count", 0)
+    target.setdefault("stream_latency_ms_first_partial", None)
+    target.setdefault("stream_dropouts", 0)
+    return target
+
+
+def _append_ops_log(
+    status: str,
+    *,
+    state: Optional[MutableMapping[str, Any]] = None,
+    timestamp: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Append operational telemetry to ops_log.jsonl."""
+    OPS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    session = _ensure_session_lists(state)
+    ts = timestamp or datetime.now()
+    record = {
+        "ts": ts.isoformat(),
+        "status": status,
+        "queue_len": len(session.get("crm_queue", [])),
+        "ai_failures": int(session.get("ai_fail_count", 0) or 0),
+        "stream_updates": session.get("stream_updates_count"),
+        "stream_latency_ms_first_partial": session.get("stream_latency_ms_first_partial"),
+        "stream_dropouts": session.get("stream_dropouts"),
+    }
+    with OPS_LOG_PATH.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record) + "\n")
+    return record
+
+
+def append_ops_log_event(
+    status: str,
+    *,
+    state: Optional[MutableMapping[str, Any]] = None,
+    timestamp: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Public helper to append operational telemetry (used by QA + tests)."""
+    return _append_ops_log(status, state=state, timestamp=timestamp)
 
 
 def load_snapshot() -> Dict:
@@ -79,9 +120,11 @@ def _process_payload(payload: Dict, offline: bool) -> None:
         }
         st.session_state["offline_cache"].append(cached)
         st.session_state["crm_sync_log"].append({"status": "cached", "payload": cached})
+        _append_ops_log("cached")
         save_snapshot()
     else:
         st.session_state["crm_sync_log"].append({"status": "synced", "payload": payload})
+        _append_ops_log("synced")
         save_snapshot()
 
 
@@ -123,4 +166,6 @@ def flush_offline_cache() -> int:
             remaining.append(record)
     st.session_state["offline_cache"] = remaining
     save_snapshot()
+    if flushed:
+        _append_ops_log("flushed")
     return flushed

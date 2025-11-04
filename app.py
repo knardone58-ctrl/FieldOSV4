@@ -21,6 +21,7 @@ init_env()
 
 from fieldos_config import (
     AUDIO_MAX_SECONDS,
+    AUDIO_TTL_HOURS,
     POLISH_CTA,
     POLISH_FAIL_TOAST,
     QA_MODE,
@@ -34,6 +35,7 @@ from fieldos_version import FIELDOS_VERSION
 from crm_sync import enqueue_crm_push, flush_offline_cache, load_snapshot, save_snapshot, start_crm_worker
 from ai_parser import polish_note_with_gpt, transcribe_audio
 from streaming_asr import VoskStreamer, get_pcm_stream, _VOSK_AVAILABLE
+from audio_cache import ensure_cache_dir, calculate_audio_duration
 
 FOCUS_CONTACT = {
     "name": "Acme HOA",
@@ -94,6 +96,12 @@ def init_streaming_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def ensure_audio_cache_dir() -> Path:
+    """Ensure cache exists and periodically purge stale clips."""
+    cache_dir = Path("data/audio_cache")
+    return ensure_cache_dir(cache_dir, AUDIO_TTL_HOURS, st.session_state)
 
 
 # --- V4.3 live streaming integration (Vosk) ---
@@ -204,10 +212,12 @@ with st.sidebar:
     st.metric("Queue length", len(st.session_state["crm_queue"]))
     st.metric("Cached records", len(st.session_state["offline_cache"]))
     st.markdown("### 🌀 Streaming")
-    st.metric("First partial (ms)", st.session_state["stream_latency_ms_first_partial"])
-    st.metric("Updates", st.session_state["stream_updates_count"])
-    st.metric("Dropouts", st.session_state["stream_dropouts"])
-    st.metric("Fallbacks", st.session_state["stream_fallbacks"])
+    latency = st.session_state.get("stream_latency_ms_first_partial")
+    latency_display = f"{latency} ms" if latency is not None else "—"
+    st.caption(
+        f"Last stream → first partial: {latency_display}, updates: {st.session_state.get('stream_updates_count', 0)}, "
+        f"dropouts: {st.session_state.get('stream_dropouts', 0)}, fallbacks: {st.session_state.get('stream_fallbacks', 0)}"
+    )
     st.caption(f"Snapshot last_sync: {snapshot.get('last_sync')}")
     st.caption(f"Build: FieldOS {FIELDOS_VERSION} | QA={str(QA_MODE).lower()}")
 
@@ -275,6 +285,8 @@ with c1:
         "Type or dictate below", value=st.session_state["draft_note"], height=160, label_visibility="collapsed"
     )
 
+    audio_cache_dir = ensure_audio_cache_dir()
+
     st.caption(f"HOLD to record (up to {AUDIO_MAX_SECONDS}s). Larger clips may feel slow until streaming arrives.")
     audio = st.file_uploader(
         "🎙️ Record Voice",
@@ -282,23 +294,41 @@ with c1:
         label_visibility="collapsed",
     )
     if audio is not None:
-        cache_dir = Path("data/audio_cache")
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        file_path = cache_dir / f"clip_{int(time.time())}.wav"
-        file_path.write_bytes(audio.read())
-        with st.spinner("Transcribing…"):
-            transcript, confidence, duration = transcribe_audio(str(file_path))
-        st.session_state["raw_transcript"] = transcript
-        if transcript and "Transcription unavailable" not in transcript:
-            st.session_state["draft_note"] = (st.session_state["draft_note"] + "\n" + transcript).strip()
-            st.session_state["last_transcription_confidence"] = confidence
-            st.session_state["last_transcription_duration"] = duration
-            st.session_state["ai_latency_totals"]["transcribe"] += max(duration, 0.0)
-            st.session_state["ai_latency_counts"]["transcribe"] += 1
-            st.toast(f"Captured and transcribed ({duration:.1f}s audio, conf ~{confidence:.2f}).")
+        audio_bytes = audio.read()
+        duration = calculate_audio_duration(audio_bytes, audio.name or "")
+        if duration is not None and duration > AUDIO_MAX_SECONDS:
+            st.toast(
+                f"Clip is {duration:.1f}s — max length is {AUDIO_MAX_SECONDS}s. Please record a shorter note.",
+                icon="⚠️",
+            )
         else:
-            st.session_state["ai_fail_count"] += 1
-            st.toast("Transcription unavailable right now—saved raw audio context to note.", icon="⚠️")
+            file_path = audio_cache_dir / f"clip_{int(time.time())}.wav"
+            file_path.write_bytes(audio_bytes)
+            with st.spinner("Transcribing…"):
+                transcript, confidence, duration = transcribe_audio(str(file_path))
+            st.session_state["raw_transcript"] = transcript
+            if transcript and "Transcription unavailable" not in transcript:
+                st.session_state["draft_note"] = (st.session_state["draft_note"] + "\n" + transcript).strip()
+                st.session_state["last_transcription_confidence"] = confidence
+                st.session_state["last_transcription_duration"] = duration
+                st.session_state["ai_latency_totals"]["transcribe"] += max(duration, 0.0)
+                st.session_state["ai_latency_counts"]["transcribe"] += 1
+                st.toast(f"Captured and transcribed ({duration:.1f}s audio, conf ~{confidence:.2f}).")
+            else:
+                st.session_state["ai_fail_count"] += 1
+                st.toast("Transcription unavailable right now—saved raw audio context to note.", icon="⚠️")
+
+    download_text = (
+        st.session_state.get("stream_final_text") or st.session_state.get("raw_transcript") or ""
+    )
+    st.download_button(
+        "Download last transcript",
+        data=download_text,
+        file_name="fieldos_last_transcript.txt",
+        mime="text/plain",
+        disabled=not download_text.strip(),
+        help=None if download_text.strip() else "No transcript captured yet.",
+    )
 
     def _handle_polish() -> None:
         metadata: Dict[str, str] = {
