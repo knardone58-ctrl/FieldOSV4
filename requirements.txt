@@ -9,3 +9,8 @@ ruff>=0.6.8
 pre-commit>=3.8.0
 vosk==0.3.44
 faster-whisper>=1.0.1
+ctranslate2>=4.0,<5
+onnxruntime>=1.14,<2
+tokenizers>=0.13,<1
+huggingface-hub>=0.21
+av>=11

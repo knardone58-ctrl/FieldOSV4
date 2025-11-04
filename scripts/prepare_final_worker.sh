@@ -14,6 +14,9 @@ git add \
   docs/final_worker_prototype.md \
   docs/faster_whisper_checklist.md \
   scripts/run_streaming_session.sh \
+  scripts/run_final_worker_smoke.sh \
+  scripts/build_faster_whisper_from_source.sh \
+  scripts/start_final_worker.py \
   README.md \
   pytest.ini
 

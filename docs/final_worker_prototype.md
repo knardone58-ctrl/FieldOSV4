@@ -42,6 +42,8 @@ STREAMLIT_BROWSER_GATHER_USAGE_STATS=false streamlit run prototypes/final_worker
 - Completed jobs populate `st.session_state["final_worker_last_result"]` with `job_id`, `transcript`, `confidence`, `latency_ms`, and an ISO8601 `completed_at` timestamp.
 - In the primary app, this state drives the **High-Accuracy Transcript** panel and sidebar telemetry, so verifying it here mirrors the operator experience.
 - CRM payloads record both the streaming partial (`transcription_stream_partial`) and the final transcript plus metadata (`transcription_final_*` fields). Ops logs capture queue depth/last success/error for the worker.
+- Use `scripts/download_faster_whisper.sh <model>` to preload weights when you want to test the live worker path (the QA suite keeps the worker mocked by default).
+- To validate the live model outside Streamlit, run `scripts/start_final_worker.py --clip path/to/audio.wav`; it reuses the same configuration flags and exits after printing the transcript (or any error).
 - To reset the prototype completely, click “Shutdown worker” and then rerun the app (`Command+R` in the Streamlit UI or restart the `streamlit run` command).
 
 If all checks pass, the prototype satisfies the success criteria outlined in `docs/faster_whisper_checklist.md`.

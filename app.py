@@ -491,18 +491,6 @@ with c1:
     audio_cache_dir = ensure_audio_cache_dir()
 
     st.caption(f"Record or upload up to {AUDIO_MAX_SECONDS}s (shorter clips respond faster).")
-    raw_display = st.session_state.get("raw_transcript_display", "Awaiting capture")
-    with st.container(border=True):
-        st.caption("Raw transcript (read-only)")
-        st.text_area(
-            "Raw transcript (read-only)",
-            value=raw_display,
-            key="raw_transcript_readonly",
-            height=120,
-            disabled=True,
-            label_visibility="collapsed",
-        )
-
     audio_bytes: Optional[bytes] = None
     audio_name = ""
 
@@ -529,7 +517,8 @@ with c1:
     if audio_bytes is not None:
         clip_fingerprint = hashlib.sha1(audio_bytes).hexdigest()
         processed_fingerprint = st.session_state.get("processed_clip_fingerprint")
-        if processed_fingerprint == clip_fingerprint:
+        last_saved_fingerprint = st.session_state.get("last_saved_clip_fingerprint")
+        if processed_fingerprint == clip_fingerprint and processed_fingerprint != last_saved_fingerprint:
             if not st.session_state.get("dedupe_notice_shown", False):
                 st.info("Clip already processed. Upload a new audio clip to transcribe again.")
                 st.session_state["dedupe_notice_shown"] = True
@@ -594,6 +583,11 @@ with c1:
     else:
         if not st.session_state.get("raw_transcript_display"):
             st.session_state["raw_transcript_display"] = "Awaiting capture"
+
+    raw_display = st.session_state.get("raw_transcript_display", "Awaiting capture")
+    with st.container(border=True):
+        st.caption("Raw transcript (read-only)")
+        st.code(raw_display or "Awaiting capture", language="text")
 
     download_text = (
         st.session_state.get("stream_final_text") or st.session_state.get("raw_transcript") or ""
@@ -704,9 +698,10 @@ with c1:
         st.toast("Saved locally & queued CRM sync.")
         st.session_state["progress_done"] = min(3, st.session_state["progress_done"] + 1)
         st.session_state["last_saved_clip_fingerprint"] = st.session_state.get("processed_clip_fingerprint")
+        st.session_state["processed_clip_fingerprint"] = None
         st.session_state["dedupe_notice_shown"] = False
-        if "audio_uploader" in st.session_state:
-            st.session_state["audio_uploader"] = None
+        st.session_state["raw_transcript"] = ""
+        st.session_state["raw_transcript_display"] = "Awaiting capture"
         st.session_state["last_crm_payload"] = payload
 
     last_payload = st.session_state.get("last_crm_payload")

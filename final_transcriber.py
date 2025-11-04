@@ -15,6 +15,7 @@ reliable on macOS.
 
 from __future__ import annotations
 
+import importlib
 import multiprocessing as mp
 import queue
 import time
@@ -82,6 +83,11 @@ def start_worker(config: WorkerConfig, handle: Optional[WorkerHandle] = None) ->
             manager=None,
         )
 
+    preflight_error = _preflight_check(config)
+    if preflight_error:
+        shutdown_worker(handle)
+        raise RuntimeError(preflight_error)
+
     ctx = mp.get_context("spawn")
     if handle and handle.process is not None:
         if handle.process.is_alive():
@@ -114,6 +120,9 @@ def start_worker(config: WorkerConfig, handle: Optional[WorkerHandle] = None) ->
         result_queue=result_queue,
         manager=manager,
     )
+    new_handle.last_error = None
+    new_handle.last_heartbeat = None
+    new_handle.last_success_ts = None
     return new_handle
 
 
@@ -218,12 +227,14 @@ def collect_stats(handle: Optional[WorkerHandle], pending_jobs_count: int = 0) -
             "last_success_ts": None,
             "last_error": None,
             "last_heartbeat": None,
+            "model": None,
         }
     return {
         "queue_depth": pending_jobs_count,
         "last_success_ts": handle.last_success_ts,
         "last_error": handle.last_error,
         "last_heartbeat": handle.last_heartbeat,
+        "model": handle.config.model,
     }
 
 
@@ -276,6 +287,9 @@ def _cleanup_handle_resources(handle: WorkerHandle) -> None:
     handle.result_queue = None
     handle.manager = None
     handle.process = None
+    handle.last_error = None
+    handle.last_heartbeat = None
+    handle.last_success_ts = None
 
 
 def _worker_loop(config: Dict[str, Any], job_queue: Any, result_queue: Any) -> None:
@@ -369,6 +383,21 @@ def _load_model(config: Dict[str, Any], result_queue: Any):
         error_text = f"Failed to load model '{config['model']}': {exc}"
         result_queue.put({"type": "worker_error", "error": error_text})
         return None, error_text
+
+
+def _preflight_check(config: WorkerConfig) -> Optional[str]:
+    """Verify runtime dependencies before starting the worker process."""
+    if config.mock or not config.enabled or config.qa_mode:
+        return None
+    try:
+        importlib.import_module("faster_whisper")
+    except Exception as exc:
+        return (
+            "faster-whisper is not available. "
+            "Activate the FieldOS virtualenv or run scripts/setup_env.sh. "
+            f"Original error: {exc}"
+        )
+    return None
 
 
 __all__ = [

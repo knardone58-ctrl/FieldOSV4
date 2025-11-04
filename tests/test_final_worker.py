@@ -53,6 +53,7 @@ def test_mock_worker_roundtrip(tmp_path: Path) -> None:
     assert stats["last_success_ts"] is not None
     assert "last_heartbeat" in stats
     assert "last_error" in stats
+    assert stats["model"] == "base"
     assert isinstance(stats["last_success_ts"], float)
     shutdown_worker(handle)
 
