@@ -50,6 +50,20 @@ The harness exports `FIELDOS_FINAL_WORKER_ENABLED=false` and `FIELDOS_FINAL_WORK
 - Final worker telemetry now rides alongside these metrics: queue depth, last success timestamp, and any surfaced error. The summary script and dashboard flag queue depths above 3 and highlight errors so ops crews can react quickly.
 - **Privacy note:** scrub or rotate `data/ops_log.jsonl` before sharing it outside the team—timestamps and status data may reveal customer interactions.
 
+## Reference Copilot
+
+- Build (or refresh) the retrieval index with `python3 scripts/build_reference_index.py`. When `OPENAI_API_KEY` is absent, the script copies the deterministic stub at `tests/fixtures/reference_index_stub.jsonl`.
+- Configure env vars (see `.env.example`):
+  - `FIELDOS_CHAT_EMBED_MODEL`, `FIELDOS_CHAT_COMPLETION_MODEL`
+  - `FIELDOS_CHAT_INDEX_PATH` / `FIELDOS_CHAT_INDEX_STUB_PATH`
+  - `FIELDOS_CHAT_STUB_PATH`
+  - `FIELDOS_CHAT_FALLBACK_MODE` (`stub`, `keyword`, or blank for live embeddings)
+  - `FIELDOS_PRIVACY_MODE=true` hashes queries in ops telemetry.
+- In QA/CI runs, export `FIELDOS_CHAT_FALLBACK_MODE=stub` so the copilot delivers deterministic answers without network calls.
+- The right-column **Reference Copilot** panel streams chat history, cites snippets (Wiki/CRM/Playbook), and surfaces a “Clear conversation” shortcut.
+- Ask positioning-style questions (e.g., “How should I position mulch to Samir?”) to receive a 🟢 **Positioning Brief** with value props, pricing, promo notes, and an “Insert positioning summary” button that drops the summary into the draft note.
+- Ops telemetry now captures `chat_requests`, fallback ratios, latest errors, and (when privacy mode is enabled) the 12-character hash of the most recent query.
+
 ## High-Accuracy Transcript Panel
 
 - Enable the final transcription worker with `FIELDOS_FINAL_WORKER_ENABLED=true`. For development and QA runs, set `FIELDOS_FINAL_WORKER_MOCK=true` to return deterministic mock transcripts.
@@ -62,6 +76,17 @@ The harness exports `FIELDOS_FINAL_WORKER_ENABLED=false` and `FIELDOS_FINAL_WORK
 - For standalone verification, run `scripts/start_final_worker.py [--clip path.wav]` to launch the worker outside Streamlit and confirm the model loads correctly.
 - See the [Final Worker Runbook](docs/final_worker_runbook.md) for operational toggles, monitoring tips, and rollback instructions ahead of production rollout.
 - Hardware note: the real faster-whisper path needs AVX2/F16C (most modern Intel/AMD CPUs) or Apple Silicon + Metal; on older hosts run the mock smoke (`FIELDOS_FINAL_WORKER_ENABLED=true FIELDOS_FINAL_WORKER_MOCK=true scripts/run_final_worker_smoke.sh`) to validate wiring without the heavy model.
+- **Intelligence Center**: edit `data/contact_intel.json` to tailor recent jobs, quotes, promos; the panel hides when empty.
+- **Playbook & quote builder**: `data/playbooks.json` drives talk-track cues; `data/pricing.json` powers the quote card.
+- **Pipeline snapshot**: `data/pipeline_snapshot.json` feeds sidebar metrics; use the refresh button after edits.
+- **Reference expanders**: company wiki (`data/company_wiki.md`), CRM sample (`data/crm_sample.csv`), and sales playbook (`data/sales_playbook.md`) load on demand in the sidebar.
+- Each “Save & Queue CRM Push” updates `data/crm_sample.csv`. Run `python3 scripts/mock_crm_server.py --port 8787` during demos or configure `FIELDOS_CRM_ENDPOINT`; clean transient rows with `python3 scripts/reset_crm_sample.py [--keep-demo]`.
+
+### Demo data refresh cadence
+- **Contact intel** (`data/contact_intel.json`) – curated by Solutions Engineering; update before each major demo. Strip customer PII and note the refresh date.
+- **Playbooks** (`data/playbooks.json`) – maintained by Sales Enablement; check weekly to ensure scripts reflect current offers.
+- **Pricing** (`data/pricing.json`) – supplied by RevOps; refresh when price tiers change. The quote builder uses cached values offline.
+- **Pipeline snapshot** (`data/pipeline_snapshot.json`) – generated nightly by RevOps/data. If the sidebar warning appears, rerun the export script or bump `last_updated`; the in-app refresh button clears the warning on the next rerun.
 - GPU tuning: set `FIELDOS_WHISPER_DEVICE=cuda` (or `metal` on Apple Silicon) and adjust `FIELDOS_WHISPER_COMPUTE_TYPE` as needed.
 - See [`docs/final_worker_prototype.md`](docs/final_worker_prototype.md) for a walkthrough and mock validation steps.
 
@@ -72,6 +97,10 @@ The harness exports `FIELDOS_FINAL_WORKER_ENABLED=false` and `FIELDOS_FINAL_WORK
   - `transcription_final`: final worker transcript (empty string when the worker has not produced a result).
   - `transcription_final_confidence`, `transcription_final_latency_ms`, `transcription_final_completed_at`: populated when a final transcript exists, otherwise `null`.
 - `ai_model_version` appends `| final_worker=<model>` only when a final transcript has been generated.
+- Each CRM push now records delivery state; the Smart Suggestion pane shows badges for `synced`, `cached`, `retrying`, or `failed`, and the retry button re-enqueues the most recent payload.
+- `data/crm_snapshot.json` now persists the most recent CRM payload and `last_crm_status` metadata (plus a bounded history). Review the snapshot before demos, and run `python3 scripts/cleanup_snapshot.py` to scrub payloads and status fields before committing or sharing artifacts.
+- Use the mock CRM endpoint during local runs: `python3 scripts/mock_crm_server.py --port 8787` exposes `POST /crm/push` returning `{"status": "ok"}`. Override with real credentials by setting `FIELDOS_CRM_ENDPOINT`, `FIELDOS_CRM_API_KEY`, timeout, and retry env vars.
+- CRM delivery honours the following env vars (see `.env.example`): `FIELDOS_CRM_ENDPOINT`, `FIELDOS_CRM_API_KEY`, `FIELDOS_CRM_TIMEOUT`, and `FIELDOS_CRM_MAX_RETRIES`.
 
 ## CI Publishing
 
@@ -84,9 +113,12 @@ The harness exports `FIELDOS_FINAL_WORKER_ENABLED=false` and `FIELDOS_FINAL_WORK
 | `qa/qa_suite.sh` | Full regression sweep (baseline, AI, fallback, streaming) with ops-log verification |
 | `scripts/run_streaming_session.sh` | Launch Streamlit headless, optionally tail logs, then run deterministic streaming QA |
 | `scripts/report_ops_log.py` | Emit Markdown summary of ops metrics |
+| `scripts/build_reference_index.py` | Chunk reference docs and build the copilot search index (falls back to stub offline) |
 | `scripts/start_final_worker.py` | Spin up the final worker outside Streamlit; optional one-shot transcription for local smoke tests |
 | `ops_dashboard.py` | Streamlit dashboard for visualizing ops log entries |
 | `scripts/post_ci_wrap.sh` | Package artifacts and tag releases (`--tag v4.4.0-beta` for the final worker rollout) |
+| `scripts/mock_crm_server.py` | Lightweight stub server for CRM push testing (`POST /crm/push`) |
+| `scripts/cleanup_snapshot.py` | Scrub `last_payload` / `recent_payloads` from the CRM snapshot before sharing demo data |
 
 Additional references:
 

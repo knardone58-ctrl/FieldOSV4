@@ -13,6 +13,8 @@
 | 2025-11-04 | V4.4 | Streaming pilot preflight + QA hardening |
 | 2025-11-04 | V4.4 | Faster-whisper background worker scaffolding |
 | 2025-11-04 | V4.4 | Final worker production rollout readiness |
+| 2025-11-04 | V4.4 | Intelligence center, playbooks, and quote builder |
+| 2025-11-04 | V4.4 | Reference Copilot and knowledge retrieval |
 
 ## 2025-10-15 · FieldOS V4.1 — Daily cockpit narrative anchored the workflow
 
@@ -159,3 +161,60 @@
 - `docs/final_worker_runbook.md`
 - `docs/faster_whisper_checklist.md`
 - `docs/fieldos_narrative/product_timeline.md`
+
+## 2025-11-04 · FieldOS V4.4 — Intelligence center, playbooks, and quote builder
+
+**Summary:** Elevated the focus-contact workflow with cached account intel, contextual playbook cues, rapid quotes, and pipeline visibility supported by telemetry upgrades.
+
+**Highlights**
+- Intelligence Center panel now surfaces demo-ready history, quotes, and promotions per account using JSON snapshots.
+- Playbook cues and quote builder enrich the draft note while persisting quote summaries directly into CRM payloads.
+- Pipeline sidebar refresh control, pricing cache, and ops dashboard success-rate metrics keep reps and managers aligned in real time.
+- Reference material moved into sidebar expanders so demos stay focused on the workflow tab.
+- CRM snapshot persists the latest payload (plus bounded history) for offline dashboards while remaining scrub-friendly.
+- Smart Suggestion pane now surfaces CRM delivery status badges with one-click retries, and ops telemetry captures CRM response codes/errors.
+
+**Key Artifacts**
+- `app.py`
+- `crm_sync.py`
+- `data/contact_intel.json`
+- `data/playbooks.json`
+- `data/pricing.json`
+- `data/pipeline_snapshot.json`
+- `scripts/report_ops_log.py`
+- `ops_dashboard.py`
+- `docs/final_worker_runbook.md`
+- `README.md`
+- `scripts/cleanup_snapshot.py`
+- `scripts/mock_crm_server.py`
+- `tests/test_crm_snapshot.py`
+- `tests/test_crm_sync.py`
+
+## 2025-11-04 · FieldOS V4.4 — Reference Copilot and knowledge retrieval
+
+**Summary:** Introduced an in-app chat copilot backed by indexed wiki/CRM/playbook sources, complete with offline stubs, telemetry, and documentation updates.
+
+**Highlights**
+- Reference Copilot panel now answers natural-language questions with cited snippets from the company wiki, CRM sample, and sales playbook.
+- scripts/build_reference_index.py chunks reference docs, builds embeddings, and falls back to deterministic stubs when API keys are absent.
+- Ops telemetry and dashboards capture copilot usage, fallback ratios, and hashed queries for privacy-compliant monitoring.
+- QA regression and unit suites stub embeddings/LLM calls to keep offline runs deterministic.
+
+**Key Artifacts**
+- `chatbot.py`
+- `reference_search.py`
+- `scripts/build_reference_index.py`
+- `app.py`
+- `crm_sync.py`
+- `ops_dashboard.py`
+- `scripts/report_ops_log.py`
+- `tests/test_reference_search.py`
+- `tests/test_chatbot.py`
+- `tests/test_chat_copilot.py`
+- `qa/test_fieldos_regression.py`
+- `README.md`
+- `docs/final_worker_runbook.md`
+- `AGENTS.md`
+- `.env.example`
+- `tests/fixtures/reference_index_stub.jsonl`
+- `tests/fixtures/chat_stub.json`

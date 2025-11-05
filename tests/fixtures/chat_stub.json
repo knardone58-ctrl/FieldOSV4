@@ -1,0 +1,86 @@
+[
+  {
+    "query": "What is our mulch promo?",
+    "answer": "Mulch promo offers 15% off seasonal cleanup bundles; cite Mulch Promo Guidelines for details.",
+    "summary": "Value props: Boost curb appeal with fresh mulch; Promo: 15% promo; Pricing: Base price 2400 USD",
+    "citations": [
+      {
+        "source": "wiki",
+        "title": "Mulch Promo Guidelines",
+        "url": "#company-wiki",
+        "category": "general",
+        "tags": [],
+        "value_props": [],
+        "discount": null,
+        "content": "Mulch promo 15% off seasonal cleanup packages with bundled bed edging tips.",
+        "metadata": {"category": "general"}
+      }
+    ]
+  },
+  {
+    "query": "How should I position mulch to Samir?",
+    "mode": "positioning",
+    "answer": "Here’s how to position Seasonal Cleanup + Mulch: • Value props: Boost curb appeal with fresh mulch, Suppress weeds and retain soil moisture, Lock in promo pricing before peak season • Pricing & promo: 15% promo • Suggested angle: Highlight the promo window, emphasize curb appeal, and recommend the winterization upsell.",
+    "summary": "Value props: Boost curb appeal with fresh mulch; Suppress weeds and retain soil moisture; Lock in promo pricing before peak season\nPromo: 15% promo\nPricing: Base price 2400 USD",
+    "citations": [
+      {
+        "source": "playbook",
+        "title": "Mulch Upsell Script",
+        "url": "#sales-playbook",
+        "category": "value_prop",
+        "tags": ["upsell", "promo"],
+        "value_props": ["Boost curb appeal with fresh mulch", "Suppress weeds and retain soil moisture", "Lock in promo pricing before peak season"],
+        "discount": "15% promo",
+        "content": "Mention the 15% mulch promo if they book before Friday.",
+        "metadata": {"category": "value_prop", "service": "Seasonal Cleanup + Mulch", "last_updated": "2025-10-28T08:00:00Z"}
+      },
+      {
+        "source": "pricing",
+        "title": "Seasonal Cleanup + Mulch Pricing",
+        "url": "#company-wiki",
+        "category": "pricing",
+        "tags": ["pricing"],
+        "value_props": [],
+        "discount": "15% off mulch bundles before Friday",
+        "content": "Base price: 2400 USD Upsells: Mulch refresh ($350); Winterization add-on ($420)",
+        "metadata": {"category": "pricing", "service": "Seasonal Cleanup + Mulch", "last_updated": "2025-10-28T08:00:00Z"}
+      }
+    ]
+  },
+  {
+    "query": "Summarize Acme HOA CRM status.",
+    "answer": "Acme HOA is in Proposal stage with Marcus Tillman and awaiting mulch follow-up.",
+    "summary": "Account status: Proposal with Marcus Tillman; awaiting mulch follow-up.",
+    "citations": [
+      {
+        "source": "crm",
+        "title": "Acme HOA Summary",
+        "url": "#crm-snapshot",
+        "category": "general",
+        "tags": [],
+        "value_props": [],
+        "discount": null,
+        "content": "Acme HOA requesting mulch promo follow-up; stage Proposal with rep Marcus Tillman.",
+        "metadata": {"category": "general", "record_type": "account", "service": "Seasonal Cleanup + Mulch"}
+      }
+    ]
+  },
+  {
+    "query": "Do we have a winter upsell?",
+    "answer": "Yes—offer the winterization add-on per the Winter Upsell Script.",
+    "summary": "Recommend the winterization add-on upsell to lock pricing.",
+    "citations": [
+      {
+        "source": "playbook",
+        "title": "Mulch Upsell Script",
+        "url": "#sales-playbook",
+        "category": "value_prop",
+        "tags": ["upsell", "promo"],
+        "value_props": ["Boost curb appeal with fresh mulch", "Suppress weeds and retain soil moisture", "Lock in promo pricing before peak season"],
+        "discount": "15% promo",
+        "content": "Mention the 15% mulch promo if they book before Friday.",
+        "metadata": {"category": "value_prop", "service": "Seasonal Cleanup + Mulch"}
+      }
+    ]
+  }
+]

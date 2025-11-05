@@ -14,7 +14,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Dict, Tuple
 
-from fieldos_config import QA_MODE, TRANSCRIBE_ENGINE
+from fieldos_config import QA_MODE, TRANSCRIBE_ENGINE, VOSK_MODEL_PATH
 
 try:
     import soundfile as sf
@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
 
 _OPENAI_CLIENT = None
 _VOSK_MODEL = None
+_FASTER_WHISPER_MODEL = None
 LOGGER = getLogger(__name__)
 
 
@@ -52,11 +53,30 @@ def _load_vosk_model():
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("Vosk not installed. Set FIELDOS_TRANSCRIBE_ENGINE to whisper_* or install vosk.") from exc
 
-        model_path = os.getenv("FIELDOS_VOSK_MODEL_PATH", "models/vosk-small-en-us")
-        if not Path(model_path).exists():
-            raise RuntimeError(f"Vosk model not found at {model_path}.")
-        _VOSK_MODEL = Model(model_path)
+        if not Path(VOSK_MODEL_PATH).exists():
+            raise RuntimeError(f"Vosk model not found at {VOSK_MODEL_PATH}.")
+        _VOSK_MODEL = Model(VOSK_MODEL_PATH)
     return _VOSK_MODEL
+
+
+def _load_faster_whisper():
+    """Lazy-load faster-whisper model for CPU/GPU execution."""
+    global _FASTER_WHISPER_MODEL
+    if QA_MODE:
+        return None
+    if _FASTER_WHISPER_MODEL is None:
+        try:
+            from faster_whisper import WhisperModel  # type: ignore
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "faster-whisper not installed. Run scripts/setup_env.sh or pip install faster-whisper."
+            ) from exc
+
+        model_name = os.getenv("FIELDOS_WHISPER_MODEL", "base")
+        device = os.getenv("FIELDOS_WHISPER_DEVICE", "cpu")
+        compute_type = os.getenv("FIELDOS_WHISPER_COMPUTE_TYPE", "int8")
+        _FASTER_WHISPER_MODEL = WhisperModel(model_name, device=device, compute_type=compute_type)
+    return _FASTER_WHISPER_MODEL
 
 
 def _transcribe_vosk(file_path: str) -> Tuple[str, float, float]:
@@ -127,6 +147,24 @@ def _transcribe_whisper_api(file_path: str) -> Tuple[str, float, float]:
     return transcript, confidence, duration
 
 
+def _transcribe_faster_whisper(file_path: str) -> Tuple[str, float, float]:
+    model = _load_faster_whisper()
+    if model is None:
+        return ("", 0.0, 0.0)
+    beam_size = int(os.getenv("FIELDOS_WHISPER_BEAM_SIZE", "5"))
+    start = time.time()
+    segments, info = model.transcribe(file_path, language="en", beam_size=beam_size)
+    segment_list = list(segments)
+    duration = time.time() - start
+    transcript = " ".join(seg.text.strip() for seg in segment_list if getattr(seg, "text", None)).strip()
+    conf_scores = [seg.avg_logprob for seg in segment_list if getattr(seg, "avg_logprob", None) is not None]
+    confidence = float(sum(conf_scores) / len(conf_scores)) if conf_scores else 0.0
+    clip_duration = getattr(info, "duration", 0.0) if info is not None else 0.0
+    if not clip_duration and segment_list:
+        clip_duration = max((seg.end or 0.0) for seg in segment_list)
+    return transcript, confidence, clip_duration
+
+
 def transcribe_audio(file_path: str) -> Tuple[str, float, float]:
     """Transcribe audio file and return (text, confidence, duration_seconds)."""
     if QA_MODE:
@@ -140,6 +178,8 @@ def transcribe_audio(file_path: str) -> Tuple[str, float, float]:
             return _transcribe_whisper_local(file_path)
         if engine == "whisper_api":
             return _transcribe_whisper_api(file_path)
+        if engine == "faster_whisper":
+            return _transcribe_faster_whisper(file_path)
         raise ValueError(f"Unknown FIELDOS_TRANSCRIBE_ENGINE: {engine}")
     except Exception as exc:  # pragma: no cover
         LOGGER.warning("Transcription engine failed (%s): %s", engine, exc)

@@ -42,12 +42,29 @@ Operational guide for running the faster-whisper “final transcript” worker i
 - **Dashboards**: `streamlit run ops_dashboard.py` highlights final worker queue depth (warning > 3), last success time, and any errors.
 - **Reports**: `python3 scripts/report_ops_log.py` prints a Markdown summary with warnings when queue depth exceeds the threshold or recent errors exist.
 - **Ops log**: `data/ops_log.jsonl` records every CRM event with `final_worker_queue_depth`, `final_worker_last_success`, and `final_worker_error`. Use `tail -f` for real-time monitoring.
-- **Snapshot**: `data/crm_snapshot.json` captures `final_transcribe_stats` for postmortems.
+- **Snapshot**: `data/crm_snapshot.json` now captures the latest CRM payload (`last_payload`) plus a bounded history (`recent_payloads`, max five entries) alongside `final_transcribe_stats`. Scrub payloads with `python3 scripts/cleanup_snapshot.py` before sharing artifacts. Clear transient CRM sample rows with `python3 scripts/reset_crm_sample.py [--keep-demo]` when needed.
+- **CRM delivery**: ops log entries now include `crm_response_code`, `crm_error`, and `crm_attempts`. Watch the Streamlit cockpit for synced/cached/failed badges and retry prompts; the mock server lives at `scripts/mock_crm_server.py`.
+
+## 4.1 Reference Copilot Operations
+- **Index build**: run `python3 scripts/build_reference_index.py`. With `OPENAI_API_KEY` unset (or `FIELDOS_CHAT_USE_STUB=true`), the script copies the deterministic stub index instead of making API calls. Artifacts land at `data/reference_index.jsonl` + `.meta.json`.
+- **Environment toggles**:
+  - `FIELDOS_CHAT_EMBED_MODEL`, `FIELDOS_CHAT_COMPLETION_MODEL`
+  - `FIELDOS_CHAT_INDEX_PATH` / `_STUB_PATH`
+  - `FIELDOS_CHAT_STUB_PATH`
+  - `FIELDOS_CHAT_FALLBACK_MODE` (`stub` for offline demos, `keyword` for embeddings-off keyword search, blank for live API usage)
+  - `FIELDOS_PRIVACY_MODE=true` hashes the last query in ops telemetry.
+- **Fallback behaviour**: In QA/CI exports, set `FIELDOS_CHAT_FALLBACK_MODE=stub` to rely on deterministic answers (no network). When both index and stub are missing, the UI surfaces a banner prompting you to run the build script or set the stub env vars.
+- **Telemetry hooks**: Ops logs now include `chat_requests`, `chat_fallback_count`, `chat_last_error`, plus either `chat_last_hash` (privacy mode) or `chat_last_query`. The dashboard/report summarize these values; investigate repeated fallbacks or errors before demos.
+- **Positioning briefs**: When a query includes pitch/positioning cues, the copilot surfaces a 🟢 Positioning Brief with value props, promo/pricing highlights, and an “Insert positioning summary” button that appends the brief to the draft note.
+- **Rollback**: remove the copilot container from `app.py`, delete `chatbot.py` / `reference_search.py`, and reset the env vars. Scrub the index artifacts (`data/reference_index*`) if they should not persist on the host.
 
 ## 5. Demo Walkthrough Highlights
-- Record or upload audio; the **Raw transcript** panel renders the unedited text while the Draft Note remains fully editable.
+- Record or upload audio; the **Intelligence Center** surfaces recent jobs/open quotes/promos pulled from `data/contact_intel.json`, while the **Raw transcript** panel keeps the unedited text visible next to the editable draft.
+- Tap a **Playbook cue** to drop a scripted talking point into the note—the cue grays out, shows up under “Used cues,” and resets when a new transcript arrives.
+- Generate a quote with the **Quote Builder** card (`data/pricing.json`); use the one-time “Insert quote into draft note” CTA to append the templated summary (capture a screenshot for `docs/screenshots/quote-card.png`).
 - Watch the **High-Accuracy Transcript** panel update when the worker finishes—confidence, latency, and completion timestamps are called out with plain-language captions.
-- After pressing **Save & Queue CRM Push**, scroll to the “Last CRM payload” expander to display the exact payload (streaming partial + final transcript) for the audience.
+- After pressing **Save & Queue CRM Push**, show the “Last CRM payload” expander (streaming partial + final transcript + quote summary) and highlight the pipeline sidebar metrics. Call out the CRM status badge (Synced/Cached/Retrying/Failed) and, if failure occurs, demonstrate the one-click **Retry CRM Push** button. Use the “Refresh pipeline snapshot” button (toast: “Pipeline snapshot refreshed”) if you tweak `data/pipeline_snapshot.json`.
+- Reference material (runbook, wiki, CRM sample, sales playbook) now lives in sidebar expanders so you can surface context without leaving the workflow.
 - Re-running the demo won’t duplicate clips; the uploader clears after save and the SHA1 guard warns if you try to reuse the same audio.
 
 ## 6. Troubleshooting
@@ -72,6 +89,9 @@ Operational guide for running the faster-whisper “final transcript” worker i
 - [ ] Run the CLI smoke test (Section 3) on the target host with real audio.
 - [ ] Confirm dashboard/report show healthy queue depth and last success timestamps.
 - [ ] Archive a CRM snapshot (`data/crm_snapshot.json`) post-smoke for validation.
+- [ ] Scrub `last_payload`/`recent_payloads` before committing or distributing demo data (`python3 scripts/cleanup_snapshot.py`).
+- [ ] Reset `data/crm_sample.csv` with `python3 scripts/reset_crm_sample.py [--keep-demo]` if demo pushes added extra rows.
+- [ ] Reset `last_crm_status` / `crm_status` entries with the same script to keep shared artifacts clean.
 - [ ] Tag release via `scripts/post_ci_wrap.sh --tag v4.4.0-beta` (or appropriate semantic version).
 - [ ] Update `docs/fieldos_narrative/timeline.json` + regenerate timeline (already automated via `scripts/update_product_timeline.py`).
 - [ ] Follow-up action: run the live smoke on an AVX2/Apple-Silicon machine and record results for ops sign-off (mock mode validated locally).

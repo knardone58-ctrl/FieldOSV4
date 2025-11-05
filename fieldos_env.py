@@ -1,5 +1,6 @@
 """Utility to ensure environment variables are loaded early."""
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -10,3 +11,6 @@ def init_env() -> None:
     env_path = Path(".env")
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
+
+    # Avoid duplicate OpenMP runtime crashes when faster-whisper + PyTorch coexist.
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")

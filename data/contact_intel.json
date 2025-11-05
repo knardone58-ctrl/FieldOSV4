@@ -1,0 +1,95 @@
+{
+  "Acme HOA": {
+    "recent_jobs": [
+      {
+        "date": "2025-09-15",
+        "summary": "Fall bed maintenance",
+        "value": 1850
+      },
+      {
+        "date": "2025-07-08",
+        "summary": "Irrigation tune-up",
+        "value": 740
+      }
+    ],
+    "open_quotes": [
+      {
+        "summary": "Seasonal cleanup renewal",
+        "amount": 2400,
+        "status": "Awaiting board approval"
+      }
+    ],
+    "promotions": [
+      "Mulch promo: 15% off through Nov 15 (mention during call)",
+      "Bundle discount if they add winterization visit"
+    ],
+    "intel_notes": [
+      "Board prefers crews after 9 a.m.",
+      "President noted rising salt costs—offer fixed-rate plan"
+    ],
+    "last_updated": "2025-11-01"
+  },
+  "Lakeview Dental": {
+    "recent_jobs": [
+      {
+        "date": "2025-08-12",
+        "summary": "Front landscaping refresh",
+        "value": 2150
+      }
+    ],
+    "open_quotes": [
+      {
+        "summary": "Holiday lighting package",
+        "amount": 980,
+        "status": "Client reviewing"
+      }
+    ],
+    "promotions": [
+      "Offer complimentary planter rotation for Q4"
+    ],
+    "intel_notes": [
+      "Office manager prefers Monday morning visits",
+      "They asked about sustainable mulch options last call"
+    ],
+    "last_updated": "2025-10-28"
+  },
+  "Maplewood HOA": {
+    "recent_jobs": [
+      {
+        "date": "2025-09-01",
+        "summary": "Shrub pruning + leaf removal",
+        "value": 3250
+      }
+    ],
+    "open_quotes": [],
+    "promotions": [
+      "Bundle with winter storm prep for 10% off"
+    ],
+    "intel_notes": [
+      "Board wants photo proof within 24 hours of each visit"
+    ],
+    "last_updated": "2025-11-02"
+  },
+  "Cedar Logistics": {
+    "recent_jobs": [
+      {
+        "date": "2025-07-22",
+        "summary": "Warehouse perimeter cleanup",
+        "value": 4200
+      }
+    ],
+    "open_quotes": [
+      {
+        "summary": "Snow removal retainer",
+        "amount": 5100,
+        "status": "Negotiating terms"
+      }
+    ],
+    "promotions": [],
+    "intel_notes": [
+      "Ops director requested 24/7 hotline access",
+      "Competitor bid reportedly came in 8% lower"
+    ],
+    "last_updated": "2025-10-30"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "Seasonal Cleanup + Mulch": {
+    "base_price": 2400,
+    "unit": "USD",
+    "upsells": [
+      {"name": "Mulch refresh", "price": 350},
+      {"name": "Winterization add-on", "price": 420}
+    ],
+    "discount": "15% off mulch bundles before Friday",
+    "last_updated": "2025-10-28T08:00:00Z",
+    "value_props": [
+      "Boost curb appeal with fresh mulch",
+      "Suppress weeds and retain soil moisture",
+      "Lock in promo pricing before peak season"
+    ]
+  },
+  "Holiday Lighting": {
+    "base_price": 980,
+    "unit": "USD",
+    "upsells": [
+      {"name": "Storage & takedown", "price": 250}
+    ],
+    "discount": "10% early install discount",
+    "last_updated": "2025-10-20T12:00:00Z",
+    "value_props": [
+      "UL-certified crews manage install and takedown",
+      "Includes off-season storage",
+      "Custom designs match property aesthetics"
+    ]
+  },
+  "default": {
+    "base_price": 1200,
+    "unit": "USD",
+    "upsells": [
+      {"name": "Priority service", "price": 180}
+    ],
+    "value_props": [
+      "Maintain curb appeal with reliable service",
+      "Bundle upsells to capture incremental revenue",
+      "Highlight seasonal availability"
+    ]
+  }
+}

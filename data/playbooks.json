@@ -1,0 +1,46 @@
+{
+  "Seasonal Cleanup + Mulch": [
+    {
+      "title": "Mulch upsell",
+      "snippet": "Mention the 15% mulch promo if they book before Friday.",
+      "tags": ["upsell", "promo"],
+      "value_props": [
+        "Boost curb appeal with fresh mulch",
+        "Suppress weeds and retain soil moisture",
+        "Lock in promo pricing before peak season"
+      ],
+      "last_updated": "2025-10-28T08:00:00Z"
+    },
+    {
+      "title": "Winterization bundle",
+      "snippet": "Recommend bundling winterization to lock 2025 pricing.",
+      "tags": ["bundle"],
+      "value_props": [
+        "Protect installations in winter conditions",
+        "Provide predictable costs through winter",
+        "Keep contractors scheduled during slower months"
+      ],
+      "last_updated": "2025-10-28T08:00:00Z"
+    }
+  ],
+  "Holiday Lighting": [
+    {
+      "title": "Lighting safety",
+      "snippet": "Remind them we handle permitting and UL-certified install teams.",
+      "tags": ["risk"],
+      "value_props": [
+        "UL-certified crews handle install and takedown",
+        "Includes storage and maintenance",
+        "Custom design matched to property"
+      ],
+      "last_updated": "2025-10-20T12:00:00Z"
+    }
+  ],
+  "default": [
+    {
+      "title": "Next steps",
+      "snippet": "Ask for preferred follow-up time before ending the call.",
+      "tags": ["followup"]
+    }
+  ]
+}

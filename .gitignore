@@ -24,6 +24,8 @@ data/offline_audio_cache/
 data/models/
 crm_snapshot.json
 openai_api.log
+data/reference_index.jsonl
+data/reference_index.meta.json
 
 # QA artifacts
 qa/tmp/
