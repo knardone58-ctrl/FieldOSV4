@@ -31,3 +31,5 @@ data/reference_index.meta.json
 qa/tmp/
 qa/history/
 qa/last_whisper_accuracy.json
+
+venv-qa/
