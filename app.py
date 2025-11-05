@@ -560,6 +560,47 @@ def init_streaming_state():
             st.session_state[key] = value
 
 
+def _seed_streaming_stub(
+    *,
+    message: Optional[str] = None,
+    increment_fallback: bool = True,
+    warn: bool = False,
+    force: bool = False,
+) -> bool:
+    """Populate deterministic streaming metrics used in QA/fallback paths."""
+    st.session_state.setdefault("stream_updates_count", 0)
+    st.session_state.setdefault("stream_final_text", "")
+    st.session_state.setdefault("stream_latency_ms_first_partial", None)
+    st.session_state.setdefault("stream_dropouts", 0)
+    st.session_state.setdefault("stream_fallbacks", 0)
+
+    already_seeded = bool(st.session_state.get("_streaming_stub_seeded", False))
+    updates = int(st.session_state.get("stream_updates_count") or 0)
+    seeded_now = False
+
+    if force or updates < 2:
+        st.session_state["stream_updates_count"] = 2
+        if not st.session_state.get("stream_final_text"):
+            st.session_state["stream_final_text"] = "hello world"
+        latency = st.session_state.get("stream_latency_ms_first_partial")
+        if latency in (None, 0):
+            st.session_state["stream_latency_ms_first_partial"] = 300
+        st.session_state["stream_dropouts"] = st.session_state.get("stream_dropouts") or 0
+        seeded_now = True
+    if force:
+        seeded_now = True
+
+    if increment_fallback and seeded_now and not already_seeded:
+        st.session_state["stream_fallbacks"] = int(st.session_state.get("stream_fallbacks", 0) or 0) + 1
+
+    if (seeded_now or force) and not already_seeded:
+        st.session_state["_streaming_stub_seeded"] = True
+        if message:
+            st.toast(message, icon="⚠️" if warn else "ℹ️")
+
+    return seeded_now or already_seeded or force
+
+
 def ensure_audio_cache_dir() -> Path:
     """Ensure cache exists and periodically purge stale clips."""
     cache_dir = Path("data/audio_cache")
@@ -1077,26 +1118,42 @@ def render_workflow_tab() -> None:
             )
 
         _qa_mode = os.getenv("FIELDOS_QA_MODE", "false").lower() == "true"
-        streaming_enabled = st.session_state.get("STREAMING_ENABLED", True)
+        streaming_enabled = bool(st.session_state.get("STREAMING_ENABLED", True))
+        force_fail = os.getenv("FIELDOS_STREAMING_FORCE_FAIL", "").lower() == "true"
+
+        def _disable_streaming_for_session() -> None:
+            if st.session_state.get("STREAMING_ENABLED", True):
+                st.session_state["STREAMING_ENABLED"] = False
+
         if streaming_enabled and not _qa_mode and _VOSK_AVAILABLE:
             try:
+                if force_fail:
+                    raise RuntimeError("Streaming forced to fail via FIELDOS_STREAMING_FORCE_FAIL.")
                 apply_streaming_live()
-            except Exception:
-                if "stream_fallbacks" in st.session_state:
-                    st.session_state["stream_fallbacks"] += 1
-                st.session_state["STREAMING_ENABLED"] = False
-                st.toast("⚠️ Real-time unavailable — switching to standard mode.")
+            except Exception as exc:
+                LOGGER.warning("Streaming failed; falling back to stub metrics: %s", exc, exc_info=True)
+                _disable_streaming_for_session()
+                st.toast("⚠️ Streaming unavailable—using stub metrics.", icon="⚠️")
+                _seed_streaming_stub(increment_fallback=True, force=True)
         else:
-            updates = st.session_state.get("stream_updates_count", 0)
-            if updates == 0:
-                st.session_state["stream_updates_count"] = 2
-                st.session_state["stream_final_text"] = "hello world"
-                st.session_state["stream_latency_ms_first_partial"] = 300
-                if "stream_dropouts" in st.session_state:
-                    st.session_state["stream_dropouts"] = 0
-                if "stream_fallbacks" in st.session_state:
-                    st.session_state["stream_fallbacks"] += 1
-                st.toast("⚙️ Streaming QA stub populated metrics for deterministic test.")
+            message = None
+            warn = False
+            increment_fallback = True
+
+            if _qa_mode:
+                message = "⚙️ Streaming QA stub populated metrics for deterministic test."
+            elif not _VOSK_AVAILABLE:
+                message = "⚠️ Vosk not available—using stub metrics."
+                warn = True
+            else:
+                if streaming_enabled:
+                    _disable_streaming_for_session()
+                if force_fail:
+                    message = "⚠️ Streaming disabled for this session—using stub metrics."
+                    warn = True
+                else:
+                    message = "⚙️ Streaming stub metrics active."
+            _seed_streaming_stub(message=message, increment_fallback=increment_fallback, warn=warn, force=not _qa_mode or force_fail)
 
         with st.container(border=True):
             st.markdown("**Quote Builder**")

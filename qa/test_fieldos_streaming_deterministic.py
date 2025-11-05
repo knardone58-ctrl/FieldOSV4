@@ -44,5 +44,38 @@ def test_streaming_minimal(mock_consume):
 
     print("✅ Deterministic streaming test PASS")
 
+def test_streaming_fallback_stub():
+    cwd = os.getcwd()
+    prior_env = {
+        "FIELDOS_STREAMING_FORCE_FAIL": os.environ.get("FIELDOS_STREAMING_FORCE_FAIL"),
+        "FIELDOS_QA_MODE": os.environ.get("FIELDOS_QA_MODE"),
+        "STREAMING_ENABLED": os.environ.get("STREAMING_ENABLED"),
+    }
+    os.environ["FIELDOS_STREAMING_FORCE_FAIL"] = "true"
+    os.environ["FIELDOS_QA_MODE"] = "false"
+    os.environ["STREAMING_ENABLED"] = "true"
+    try:
+        os.chdir(APP_DIR)
+        app = AppTest.from_file("app.py")
+        app.run(timeout=5)
+
+        assert app.session_state["STREAMING_ENABLED"] is False
+        assert app.session_state["stream_updates_count"] >= 2
+        assert app.session_state["stream_final_text"] == "hello world"
+        latency = app.session_state["stream_latency_ms_first_partial"]
+        assert latency in (300, None)
+        assert app.session_state["stream_fallbacks"] >= 1
+    finally:
+        os.chdir(cwd)
+        for key, value in prior_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        os.environ.pop("FIELDOS_STREAMING_FORCE_FAIL", None)
+
+    print("✅ Streaming fallback stub test PASS")
+
 if __name__ == "__main__":
     test_streaming_minimal()
+    test_streaming_fallback_stub()
