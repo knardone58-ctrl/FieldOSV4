@@ -8,9 +8,9 @@
 # dev setup.
 #
 # Usage:
-#   scripts/setup_qa_env.sh               # uses python3, creates ./venv-qa
-#   PYTHON=python3.11 scripts/setup_qa_env.sh  # custom interpreter
-#   QA_VENV=~/envs/fieldos-qa scripts/setup_qa_env.sh  # custom virtualenv path
+#   scripts/setup_qa_env.sh [--run-qa]                    # uses python3, creates ./venv-qa
+#   PYTHON=python3.11 scripts/setup_qa_env.sh             # custom interpreter
+#   QA_VENV=~/envs/fieldos-qa scripts/setup_qa_env.sh     # custom virtualenv path
 #
 # After running, activate the env and execute the QA suite:
 #   source venv-qa/bin/activate
@@ -18,6 +18,25 @@
 #
 
 set -euo pipefail
+
+RUN_QA=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --run-qa)
+      RUN_QA=true
+      shift
+      ;;
+    *)
+      echo "Usage: $0 [--run-qa]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
 
 PYTHON_BIN="${PYTHON:-python3}"
 QA_VENV_PATH="${QA_VENV:-venv-qa}"
@@ -55,9 +74,17 @@ else
   echo "⚠️  requirements.txt not found, skipping dependency install."
 fi
 
+echo "🧩 Ensuring QA dependencies (streamlit)…"
+pip install streamlit >/dev/null
+
 echo
 echo "✅ FieldOS QA virtualenv ready."
 echo "   To use it:"
 echo "     source ${QA_VENV_PATH}/bin/activate"
 echo "     FIELDOS_QA_MODE=true STREAMING_ENABLED=false bash qa/qa_suite.sh"
 echo
+
+if [[ "${RUN_QA}" == "true" ]]; then
+  echo "▶️  Running QA suite (FIELDOS_QA_MODE=true STREAMING_ENABLED=false)…"
+  FIELDOS_QA_MODE=true STREAMING_ENABLED=false bash qa/qa_suite.sh
+fi
