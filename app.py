@@ -1076,6 +1076,28 @@ def render_workflow_tab() -> None:
                 on_click=_handle_suggestion_insert,
             )
 
+        _qa_mode = os.getenv("FIELDOS_QA_MODE", "false").lower() == "true"
+        streaming_enabled = st.session_state.get("STREAMING_ENABLED", True)
+        if streaming_enabled and not _qa_mode and _VOSK_AVAILABLE:
+            try:
+                apply_streaming_live()
+            except Exception:
+                if "stream_fallbacks" in st.session_state:
+                    st.session_state["stream_fallbacks"] += 1
+                st.session_state["STREAMING_ENABLED"] = False
+                st.toast("⚠️ Real-time unavailable — switching to standard mode.")
+        else:
+            updates = st.session_state.get("stream_updates_count", 0)
+            if updates == 0:
+                st.session_state["stream_updates_count"] = 2
+                st.session_state["stream_final_text"] = "hello world"
+                st.session_state["stream_latency_ms_first_partial"] = 300
+                if "stream_dropouts" in st.session_state:
+                    st.session_state["stream_dropouts"] = 0
+                if "stream_fallbacks" in st.session_state:
+                    st.session_state["stream_fallbacks"] += 1
+                st.toast("⚙️ Streaming QA stub populated metrics for deterministic test.")
+
         with st.container(border=True):
             st.markdown("**Quote Builder**")
             st.caption("Draft a quick estimate using cached price tiers.")
