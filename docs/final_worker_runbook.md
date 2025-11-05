@@ -95,3 +95,12 @@ Operational guide for running the faster-whisper “final transcript” worker i
 - [ ] Tag release via `scripts/post_ci_wrap.sh --tag v4.4.0-beta` (or appropriate semantic version).
 - [ ] Update `docs/fieldos_narrative/timeline.json` + regenerate timeline (already automated via `scripts/update_product_timeline.py`).
 - [ ] Follow-up action: run the live smoke on an AVX2/Apple-Silicon machine and record results for ops sign-off (mock mode validated locally).
+
+### Known limitation: macOS streaming asserts
+Streamlit now survives Vosk/Kaldi crashes by disabling streaming and seeding stub metrics, but the upstream macOS wheel can still abort the process before that guard runs. Workaround: run demos with `STREAMING_ENABLED=false` on macOS unless you can ship a custom Vosk build.
+
+Potential long-term improvement (heavy lift):
+
+- Build Kaldi and Vosk from source on macOS, bundle into a custom wheel, and update the demo instructions.
+- Requires Homebrew toolchain, multi-hour compile, Rosetta/x86 shell on Apple Silicon, scripting the env setup, and ongoing maintenance of the wheel.
+- Trade-off: real live streaming on macOS vs. added complexity; keep the stub fallback for machines without the custom build.
