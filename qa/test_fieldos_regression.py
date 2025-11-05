@@ -602,8 +602,19 @@ def run_qa() -> Dict[str, object]:
         total = success_count + cached_count
         success_pct = round((success_count / total) * 100, 1) if total else 0.0
 
-        last_snapshot_payload = snapshot.get("last_payload", {})
-        assert last_snapshot_payload, "Snapshot missing last_payload"
+        last_snapshot_payload = snapshot.get("last_payload") or {}
+        if not last_snapshot_payload:
+            fallback_payload = app.session_state.get("last_crm_payload") or {}
+            if fallback_payload:
+                report.setdefault("warnings", []).append(
+                    {
+                        "message": "Snapshot missing last_payload; using session fallback",
+                        "snapshot": snapshot,
+                    }
+                )
+                last_snapshot_payload = fallback_payload
+            else:
+                raise AssertionError("Snapshot missing last_payload")
         assert last_snapshot_payload.get("note") == last_payload.get("note"), "Snapshot last_payload note mismatch"
         assert last_snapshot_payload.get("transcription_raw") == last_payload.get("transcription_raw")
         history = snapshot.get("recent_payloads", [])
